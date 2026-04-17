@@ -1,0 +1,494 @@
+import { v } from "convex/values";
+import { mutation, query } from "./_generated/server.js";
+
+function generateRoomCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 6; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
+
+async function hashPassword(password: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function verifyPassword(password: string, hash: string): Promise<boolean> {
+  const passwordHash = await hashPassword(password);
+  return passwordHash === hash;
+}
+
+export const createRoom = mutation({
+  args: {
+    adminPassword: v.string(),
+    creatorName: v.string(),
+    creatorConnectionId: v.string(),
+  },
+  returns: v.object({
+    roomId: v.string(),
+    code: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    let code = generateRoomCode();
+    let existing = await ctx.db
+      .query("rooms")
+      .withIndex("by_code", (q) => q.eq("code", code))
+      .first();
+    while (existing) {
+      code = generateRoomCode();
+      existing = await ctx.db
+        .query("rooms")
+        .withIndex("by_code", (q) => q.eq("code", code))
+        .first();
+    }
+
+    const adminPasswordHash = await hashPassword(args.adminPassword);
+    const roomId = await ctx.db.insert("rooms", {
+      code,
+      adminPasswordHash,
+      creatorId: args.creatorConnectionId,
+      playerCount: 1,
+      createdAt: Date.now(),
+    });
+
+    await ctx.db.insert("players", {
+      roomId,
+      name: args.creatorName,
+      balance: 0,
+      isAdmin: true,
+      connectionId: args.creatorConnectionId,
+      joinedAt: Date.now(),
+    });
+
+    await ctx.db.insert("transactions", {
+      roomId,
+      type: "player_joined",
+      performedBy: args.creatorName,
+      description: `${args.creatorName} created the room`,
+      createdAt: Date.now(),
+    });
+
+    return { roomId: roomId.toString(), code };
+  },
+});
+
+export const joinRoom = mutation({
+  args: {
+    code: v.string(),
+    playerName: v.string(),
+    connectionId: v.string(),
+    adminPassword: v.optional(v.string()),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    roomId: v.optional(v.string()),
+    isAdmin: v.optional(v.boolean()),
+    playerId: v.optional(v.string()),
+    error: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const room = await ctx.db
+      .query("rooms")
+      .withIndex("by_code", (q) => q.eq("code", args.code.toUpperCase()))
+      .first();
+
+    if (!room) {
+      return { success: false, error: "Room not found" };
+    }
+
+    const existingPlayer = await ctx.db
+      .query("players")
+      .withIndex("by_connection", (q) => q.eq("connectionId", args.connectionId))
+      .first();
+
+    if (existingPlayer) {
+      return { success: false, error: "Already in a room" };
+    }
+
+    let isAdmin = false;
+    if (args.adminPassword) {
+      isAdmin = await verifyPassword(args.adminPassword, room.adminPasswordHash);
+    }
+
+    const playerId = await ctx.db.insert("players", {
+      roomId: room._id,
+      name: args.playerName,
+      balance: 1500,
+      isAdmin,
+      connectionId: args.connectionId,
+      joinedAt: Date.now(),
+    });
+
+    await ctx.db.patch(room._id, { playerCount: room.playerCount + 1 });
+
+    await ctx.db.insert("transactions", {
+      roomId: room._id,
+      type: "player_joined",
+      performedBy: args.playerName,
+      description: `${args.playerName} joined the room${isAdmin ? " as admin" : ""}`,
+      createdAt: Date.now(),
+    });
+
+    return { success: true, roomId: room._id.toString(), isAdmin, playerId: playerId.toString() };
+  },
+});
+
+export const rejoinAsAdmin = mutation({
+  args: {
+    code: v.string(),
+    adminPassword: v.string(),
+    connectionId: v.string(),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    roomId: v.optional(v.string()),
+    playerId: v.optional(v.string()),
+    error: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const room = await ctx.db
+      .query("rooms")
+      .withIndex("by_code", (q) => q.eq("code", args.code.toUpperCase()))
+      .first();
+
+    if (!room) {
+      return { success: false, error: "Room not found" };
+    }
+
+    const isPasswordValid = await verifyPassword(args.adminPassword, room.adminPasswordHash);
+    if (!isPasswordValid) {
+      return { success: false, error: "Invalid admin password" };
+    }
+
+    const existingPlayer = await ctx.db
+      .query("players")
+      .withIndex("by_connection", (q) => q.eq("connectionId", args.connectionId))
+      .first();
+
+    if (existingPlayer) {
+      await ctx.db.patch(existingPlayer._id, { isAdmin: true });
+      return { success: true, roomId: room._id.toString(), playerId: existingPlayer._id.toString() };
+    }
+
+    const newPlayerId = await ctx.db.insert("players", {
+      roomId: room._id,
+      name: "Admin",
+      balance: 0,
+      isAdmin: true,
+      connectionId: args.connectionId,
+      joinedAt: Date.now(),
+    });
+
+    await ctx.db.patch(room._id, { playerCount: room.playerCount + 1 });
+
+    return { success: true, roomId: room._id.toString(), playerId: newPlayerId.toString() };
+  },
+});
+
+export const leaveRoom = mutation({
+  args: {
+    playerId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const player = await ctx.db.get(args.playerId as any) as any;
+    if (!player) return null;
+
+    const room = await ctx.db.get(player.roomId) as any;
+    if (room) {
+      await ctx.db.patch(room._id, { playerCount: Math.max(0, room.playerCount - 1) });
+    }
+
+    await ctx.db.insert("transactions", {
+      roomId: player.roomId,
+      type: "player_left",
+      performedBy: player.name,
+      description: `${player.name} left the room`,
+      createdAt: Date.now(),
+    });
+
+    await ctx.db.delete(args.playerId as any);
+    return null;
+  },
+});
+
+export const getRoomInfo = query({
+  args: {
+    roomId: v.string(),
+  },
+  returns: v.object({
+    roomId: v.string(),
+    code: v.string(),
+    playerCount: v.number(),
+    createdAt: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const room = await ctx.db.get(args.roomId as any) as any;
+    if (!room) throw new Error("Room not found");
+    return {
+      roomId: room._id.toString(),
+      code: room.code,
+      playerCount: room.playerCount,
+      createdAt: room.createdAt,
+    };
+  },
+});
+
+export const getPlayers = query({
+  args: {
+    roomId: v.string(),
+  },
+  returns: v.array(
+    v.object({
+      _id: v.string(),
+      name: v.string(),
+      balance: v.number(),
+      isAdmin: v.boolean(),
+      joinedAt: v.number(),
+    })
+  ),
+  handler: async (ctx, args) => {
+    const players = await ctx.db
+      .query("players")
+      .withIndex("by_room", (q) => q.eq("roomId", args.roomId as any))
+      .collect();
+
+    return players.map((p) => ({
+      _id: p._id.toString(),
+      name: p.name,
+      balance: p.balance,
+      isAdmin: p.isAdmin,
+      joinedAt: p.joinedAt,
+    }));
+  },
+});
+
+export const manualBalanceChange = mutation({
+  args: {
+    playerId: v.string(),
+    amount: v.number(),
+    description: v.string(),
+    performedByConnectionId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const targetPlayer = await ctx.db.get(args.playerId as any) as any;
+    if (!targetPlayer) throw new Error("Player not found");
+
+    const performedByPlayer = await ctx.db
+      .query("players")
+      .withIndex("by_connection", (q) => q.eq("connectionId", args.performedByConnectionId))
+      .first() as any;
+
+    if (!performedByPlayer?.isAdmin) {
+      throw new Error("Only admins can perform manual balance changes");
+    }
+
+    const newBalance = targetPlayer.balance + args.amount;
+    if (newBalance < 0) {
+      throw new Error("Balance cannot be negative");
+    }
+
+    await ctx.db.patch(targetPlayer._id, { balance: newBalance });
+
+    const transactionType = args.amount >= 0 ? "manual_add" : "manual_remove";
+    await ctx.db.insert("transactions", {
+      roomId: targetPlayer.roomId,
+      type: transactionType,
+      amount: Math.abs(args.amount),
+      targetPlayerId: targetPlayer._id,
+      performedBy: performedByPlayer.name,
+      description: args.description || (args.amount >= 0 ? `Added ${args.amount}` : `Removed ${Math.abs(args.amount)}`),
+      createdAt: Date.now(),
+    });
+
+    return null;
+  },
+});
+
+export const createMoneyRequest = mutation({
+  args: {
+    roomId: v.string(),
+    playerId: v.string(),
+    amount: v.number(),
+    reason: v.string(),
+  },
+  returns: v.string(),
+  handler: async (ctx, args) => {
+    const player = await ctx.db.get(args.playerId as any) as any;
+    if (!player) throw new Error("Player not found");
+
+    const requestId = await ctx.db.insert("moneyRequests", {
+      roomId: args.roomId as any,
+      playerId: args.playerId as any,
+      amount: args.amount,
+      reason: args.reason,
+      status: "pending",
+      createdAt: Date.now(),
+    });
+
+    return requestId.toString();
+  },
+});
+
+export const getPendingRequests = query({
+  args: {
+    roomId: v.string(),
+  },
+  returns: v.array(
+    v.object({
+      _id: v.string(),
+      playerId: v.string(),
+      playerName: v.string(),
+      amount: v.number(),
+      reason: v.string(),
+      status: v.string(),
+      createdAt: v.number(),
+    })
+  ),
+  handler: async (ctx, args) => {
+    const requests = await ctx.db
+      .query("moneyRequests")
+      .withIndex("by_room_status", (q) =>
+        q.eq("roomId", args.roomId as any).eq("status", "pending")
+      )
+      .collect() as any[];
+
+    const result = [];
+    for (const req of requests) {
+      const player = await ctx.db.get(req.playerId) as any;
+      result.push({
+        _id: req._id.toString(),
+        playerId: req.playerId.toString(),
+        playerName: player?.name || "Unknown",
+        amount: req.amount,
+        reason: req.reason,
+        status: req.status,
+        createdAt: req.createdAt,
+      });
+    }
+
+    return result;
+  },
+});
+
+export const approveRequest = mutation({
+  args: {
+    requestId: v.string(),
+    performedByConnectionId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const performedByPlayer = await ctx.db
+      .query("players")
+      .withIndex("by_connection", (q) => q.eq("connectionId", args.performedByConnectionId))
+      .first() as any;
+
+    if (!performedByPlayer?.isAdmin) {
+      throw new Error("Only admins can approve requests");
+    }
+
+    const request = await ctx.db.get(args.requestId as any) as any;
+    if (!request) throw new Error("Request not found");
+
+    const player = await ctx.db.get(request.playerId) as any;
+    if (!player) throw new Error("Player not found");
+
+    await ctx.db.patch(player._id, { balance: player.balance + request.amount });
+    await ctx.db.patch(args.requestId as any, {
+      status: "approved",
+      resolvedAt: Date.now(),
+    });
+
+    await ctx.db.insert("transactions", {
+      roomId: player.roomId,
+      type: "request_approved",
+      amount: request.amount,
+      targetPlayerId: player._id,
+      performedBy: performedByPlayer.name,
+      description: `Approved request: ${request.reason}`,
+      createdAt: Date.now(),
+    });
+
+    return null;
+  },
+});
+
+export const rejectRequest = mutation({
+  args: {
+    requestId: v.string(),
+    performedByConnectionId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const performedByPlayer = await ctx.db
+      .query("players")
+      .withIndex("by_connection", (q) => q.eq("connectionId", args.performedByConnectionId))
+      .first() as any;
+
+    if (!performedByPlayer?.isAdmin) {
+      throw new Error("Only admins can reject requests");
+    }
+
+    const request = await ctx.db.get(args.requestId as any) as any;
+    if (!request) throw new Error("Request not found");
+
+    await ctx.db.patch(args.requestId as any, {
+      status: "rejected",
+      resolvedAt: Date.now(),
+    });
+
+    await ctx.db.insert("transactions", {
+      roomId: request.roomId,
+      type: "request_rejected",
+      amount: request.amount,
+      targetPlayerId: request.playerId,
+      performedBy: performedByPlayer.name,
+      description: `Rejected request: ${request.reason}`,
+      createdAt: Date.now(),
+    });
+
+    return null;
+  },
+});
+
+export const getTransactionLog = query({
+  args: {
+    roomId: v.string(),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(
+    v.object({
+      _id: v.string(),
+      type: v.string(),
+      amount: v.optional(v.number()),
+      targetPlayerId: v.optional(v.string()),
+      performedBy: v.string(),
+      description: v.string(),
+      createdAt: v.number(),
+    })
+  ),
+  handler: async (ctx, args) => {
+    let query_ = ctx.db
+      .query("transactions")
+      .withIndex("by_room_time", (q) => q.eq("roomId", args.roomId as any))
+      .order("desc");
+
+    const transactions = await query_.take(args.limit || 50);
+
+    return transactions.map((t) => ({
+      _id: t._id.toString(),
+      type: t.type,
+      amount: t.amount,
+      targetPlayerId: t.targetPlayerId?.toString(),
+      performedBy: t.performedBy,
+      description: t.description,
+      createdAt: t.createdAt,
+    }));
+  },
+});
