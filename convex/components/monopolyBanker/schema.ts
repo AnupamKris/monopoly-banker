@@ -43,7 +43,10 @@ export default defineSchema({
       v.literal("request_approved"),
       v.literal("request_rejected"),
       v.literal("player_joined"),
-      v.literal("player_left")
+      v.literal("player_left"),
+      v.literal("player_kicked"),
+      v.literal("transfer"),
+      v.literal("transfer_received")
     ),
     amount: v.optional(v.number()),
     targetPlayerId: v.optional(v.id("players")),

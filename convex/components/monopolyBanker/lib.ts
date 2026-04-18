@@ -32,6 +32,7 @@ export const createRoom = mutation({
   returns: v.object({
     roomId: v.string(),
     code: v.string(),
+    playerId: v.string(),
   }),
   handler: async (ctx, args) => {
     let code = generateRoomCode();
@@ -56,10 +57,10 @@ export const createRoom = mutation({
       createdAt: Date.now(),
     });
 
-    await ctx.db.insert("players", {
+    const playerId = await ctx.db.insert("players", {
       roomId,
       name: args.creatorName,
-      balance: 0,
+      balance: 1500,
       isAdmin: true,
       connectionId: args.creatorConnectionId,
       joinedAt: Date.now(),
@@ -73,7 +74,11 @@ export const createRoom = mutation({
       createdAt: Date.now(),
     });
 
-    return { roomId: roomId.toString(), code };
+    return {
+      roomId: roomId.toString(),
+      code,
+      playerId: playerId.toString(),
+    };
   },
 });
 
@@ -101,18 +106,48 @@ export const joinRoom = mutation({
       return { success: false, error: "Room not found" };
     }
 
+    let isAdmin = false;
+    if (args.adminPassword) {
+      isAdmin = await verifyPassword(args.adminPassword, room.adminPasswordHash);
+    }
+
     const existingPlayer = await ctx.db
       .query("players")
       .withIndex("by_connection", (q) => q.eq("connectionId", args.connectionId))
       .first();
 
     if (existingPlayer) {
-      return { success: false, error: "Already in a room" };
-    }
+      if (existingPlayer.roomId === room._id) {
+        const nextIsAdmin = existingPlayer.isAdmin || isAdmin;
+        const nameChanged = args.playerName && existingPlayer.name !== args.playerName;
+        if (nameChanged || nextIsAdmin !== existingPlayer.isAdmin) {
+          await ctx.db.patch(existingPlayer._id, {
+            name: nameChanged ? args.playerName : existingPlayer.name,
+            isAdmin: nextIsAdmin,
+          });
+        }
+        return {
+          success: true,
+          roomId: room._id.toString(),
+          isAdmin: nextIsAdmin,
+          playerId: existingPlayer._id.toString(),
+        };
+      }
 
-    let isAdmin = false;
-    if (args.adminPassword) {
-      isAdmin = await verifyPassword(args.adminPassword, room.adminPasswordHash);
+      const oldRoom = (await ctx.db.get(existingPlayer.roomId)) as any;
+      if (oldRoom) {
+        await ctx.db.patch(oldRoom._id, {
+          playerCount: Math.max(0, oldRoom.playerCount - 1),
+        });
+        await ctx.db.insert("transactions", {
+          roomId: oldRoom._id,
+          type: "player_left",
+          performedBy: existingPlayer.name,
+          description: `${existingPlayer.name} left the room`,
+          createdAt: Date.now(),
+        });
+      }
+      await ctx.db.delete(existingPlayer._id);
     }
 
     const playerId = await ctx.db.insert("players", {
@@ -490,5 +525,137 @@ export const getTransactionLog = query({
       description: t.description,
       createdAt: t.createdAt,
     }));
+  },
+});
+
+export const kickPlayer = mutation({
+  args: {
+    playerId: v.string(),
+    performedByConnectionId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const target = (await ctx.db.get(args.playerId as any)) as any;
+    if (!target) return null;
+
+    const performedBy = (await ctx.db
+      .query("players")
+      .withIndex("by_connection", (q) => q.eq("connectionId", args.performedByConnectionId))
+      .first()) as any;
+
+    if (!performedBy?.isAdmin) {
+      throw new Error("Only admins can kick players");
+    }
+
+    if (performedBy._id === target._id) {
+      throw new Error("You cannot kick yourself");
+    }
+
+    if (performedBy.roomId !== target.roomId) {
+      throw new Error("Cannot kick a player from a different room");
+    }
+
+    const room = (await ctx.db.get(target.roomId)) as any;
+    if (room) {
+      await ctx.db.patch(room._id, { playerCount: Math.max(0, room.playerCount - 1) });
+    }
+
+    await ctx.db.insert("transactions", {
+      roomId: target.roomId,
+      type: "player_kicked",
+      targetPlayerId: target._id,
+      performedBy: performedBy.name,
+      description: `${performedBy.name} kicked ${target.name}`,
+      createdAt: Date.now(),
+    });
+
+    await ctx.db.delete(target._id);
+    return null;
+  },
+});
+
+export const validateSession = query({
+  args: {
+    roomId: v.string(),
+    playerId: v.string(),
+    connectionId: v.string(),
+  },
+  returns: v.object({
+    valid: v.boolean(),
+    isAdmin: v.optional(v.boolean()),
+    name: v.optional(v.string()),
+    code: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const player = (await ctx.db.get(args.playerId as any)) as any;
+    if (!player) return { valid: false };
+    if (player.connectionId !== args.connectionId) return { valid: false };
+    if (player.roomId.toString() !== args.roomId) return { valid: false };
+
+    const room = (await ctx.db.get(player.roomId)) as any;
+    if (!room) return { valid: false };
+
+    return {
+      valid: true,
+      isAdmin: player.isAdmin,
+      name: player.name,
+      code: room.code,
+    };
+  },
+});
+
+export const transfer = mutation({
+  args: {
+    senderId: v.string(),
+    recipientId: v.string(),
+    amount: v.number(),
+    reason: v.string(),
+    connectionId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const sender = await ctx.db.get(args.senderId as any) as any;
+    if (!sender) throw new Error("Sender not found");
+
+    const recipient = await ctx.db.get(args.recipientId as any) as any;
+    if (!recipient) throw new Error("Recipient not found");
+
+    if (sender.balance < args.amount) {
+      throw new Error("Insufficient balance");
+    }
+
+    const connectionPlayer = await ctx.db
+      .query("players")
+      .withIndex("by_connection", (q) => q.eq("connectionId", args.connectionId))
+      .first() as any;
+
+    if (!connectionPlayer || connectionPlayer._id !== sender._id) {
+      throw new Error("You can only transfer from your own account");
+    }
+
+    await ctx.db.patch(sender._id, { balance: sender.balance - args.amount });
+    await ctx.db.patch(recipient._id, { balance: recipient.balance + args.amount });
+
+    await ctx.db.insert("transactions", {
+      roomId: sender.roomId,
+      type: "transfer",
+      amount: args.amount,
+      targetPlayerId: recipient._id,
+      performedBy: sender.name,
+      description: `Transfer to ${recipient.name}: ${args.reason || "No reason"}`,
+      createdAt: Date.now(),
+    });
+
+    await ctx.db.insert("transactions", {
+      roomId: sender.roomId,
+      type: "transfer_received",
+      amount: args.amount,
+      targetPlayerId: sender._id,
+      performedBy: recipient.name,
+      description: `Received from ${sender.name}: ${args.reason || "No reason"}`,
+      createdAt: Date.now(),
+    });
+
+    return null;
   },
 });

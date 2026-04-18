@@ -46,7 +46,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           creatorConnectionId: string;
           creatorName: string;
         },
-        { code: string; roomId: string },
+        { code: string; playerId: string; roomId: string },
         Name
       >;
       getPendingRequests: FunctionReference<
@@ -122,6 +122,13 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
         },
         Name
       >;
+      kickPlayer: FunctionReference<
+        "mutation",
+        "internal",
+        { performedByConnectionId: string; playerId: string },
+        null,
+        Name
+      >;
       leaveRoom: FunctionReference<
         "mutation",
         "internal",
@@ -158,6 +165,26 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           roomId?: string;
           success: boolean;
         },
+        Name
+      >;
+      transfer: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          amount: number;
+          connectionId: string;
+          reason: string;
+          recipientId: string;
+          senderId: string;
+        },
+        null,
+        Name
+      >;
+      validateSession: FunctionReference<
+        "query",
+        "internal",
+        { connectionId: string; playerId: string; roomId: string },
+        { code?: string; isAdmin?: boolean; name?: string; valid: boolean },
         Name
       >;
     };

@@ -11,6 +11,7 @@ export const createRoom = mutation({
   returns: v.object({
     roomId: v.string(),
     code: v.string(),
+    playerId: v.string(),
   }),
   handler: async (ctx, args) => {
     return await ctx.runMutation(components.monopolyBanker.lib.createRoom, {
@@ -221,6 +222,61 @@ export const getTransactionLog = query({
     return await ctx.runQuery(components.monopolyBanker.lib.getTransactionLog, {
       roomId: args.roomId,
       limit: args.limit,
+    });
+  },
+});
+
+export const kickPlayer = mutation({
+  args: {
+    playerId: v.string(),
+    connectionId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    return await ctx.runMutation(components.monopolyBanker.lib.kickPlayer, {
+      playerId: args.playerId,
+      performedByConnectionId: args.connectionId,
+    });
+  },
+});
+
+export const validateSession = query({
+  args: {
+    roomId: v.string(),
+    playerId: v.string(),
+    connectionId: v.string(),
+  },
+  returns: v.object({
+    valid: v.boolean(),
+    isAdmin: v.optional(v.boolean()),
+    name: v.optional(v.string()),
+    code: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    return await ctx.runQuery(components.monopolyBanker.lib.validateSession, {
+      roomId: args.roomId,
+      playerId: args.playerId,
+      connectionId: args.connectionId,
+    });
+  },
+});
+
+export const transfer = mutation({
+  args: {
+    senderId: v.string(),
+    recipientId: v.string(),
+    amount: v.number(),
+    reason: v.string(),
+    connectionId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    return await ctx.runMutation(components.monopolyBanker.lib.transfer, {
+      senderId: args.senderId,
+      recipientId: args.recipientId,
+      amount: args.amount,
+      reason: args.reason,
+      connectionId: args.connectionId,
     });
   },
 });
