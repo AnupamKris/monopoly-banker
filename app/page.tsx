@@ -160,7 +160,7 @@ export default function MonopolyBankerApp() {
     localStorage.removeItem(CURRENT_ROOM_KEY);
     setCurrentRoom(null);
     setShowGamePage(false);
-    if (opts?.kicked && typeof window !== "undefined") {
+    if (opts?.kicked) {
       setTimeout(() => alert("You have been removed from the room by an admin."), 50);
     }
   };
@@ -981,7 +981,9 @@ function ManualAdjustPanel({ roomId, connectionId }: { roomId: string; connectio
             items={playerSelectItems}
             value={playerId === "" ? MANUAL_ADJUST_NO_PLAYER : playerId}
             onValueChange={(v) =>
-              setPlayerId(v === MANUAL_ADJUST_NO_PLAYER ? "" : v)
+              setPlayerId(
+                v == null || v === MANUAL_ADJUST_NO_PLAYER ? "" : v,
+              )
             }
           >
             <SelectTrigger size="sm" className="w-full">

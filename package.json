@@ -36,15 +36,18 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@serwist/turbopack": "^9.5.7",
     "@tailwindcss/postcss": "^4.2.1",
-    "@types/node": "^25.5.0",
+    "@types/node": "^20.19.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "esbuild": "^0.28.0",
     "eslint": "^9.39.4",
     "eslint-config-next": "16.1.7",
     "postcss": "^8",
     "prettier": "^3.8.1",
     "prettier-plugin-tailwindcss": "^0.7.2",
+    "serwist": "^9.5.7",
     "tailwindcss": "^4.2.1",
     "typescript": "^5.9.3"
   }
