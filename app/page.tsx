@@ -713,7 +713,7 @@ function BalanceTransferTab({ roomId, playerId, connectionId, isAdmin }: { roomI
   const amountNum = parseInt(amount || "0", 10);
   const insufficient = !!currentPlayer && amountNum > currentPlayer.balance;
 
-  const quickAmounts = [10, 50, 100, 500, 1000];
+  const quickAmounts = [10, 50, 100, 500];
   const dialpadKeys: Array<{ label: string; onPress: () => void; node?: ReactNode }> = [
     { label: "1", onPress: () => appendDigit("1") },
     { label: "2", onPress: () => appendDigit("2") },
@@ -879,11 +879,11 @@ function BalanceTransferTab({ roomId, playerId, connectionId, isAdmin }: { roomI
               {bankAction === "deposit" ? <PlusCircleIcon weight="duotone" /> : <MinusCircleIcon weight="duotone" />}
               {bankAction === "deposit" ? "Deposit to Bank" : "Ask from Bank"}
             </DrawerTitle>
-            <DrawerDescription className="text-center">
+            {/* <DrawerDescription className="text-center">
               {bankAction === "deposit"
                 ? `Your balance: $${currentPlayer?.balance.toLocaleString() ?? 0}`
                 : "Bank balance: ∞"}
-            </DrawerDescription>
+            </DrawerDescription> */}
           </DrawerHeader>
 
           <div className="px-4 pb-2 space-y-4">
@@ -1025,7 +1025,7 @@ function TransferTab({ roomId, playerId, connectionId }: { roomId: string; playe
   const amountNum = parseInt(amount || "0", 10);
   const insufficient = !!currentPlayer && amountNum > currentPlayer.balance;
 
-  const quickAmounts = [10, 50, 100, 500, 1000];
+  const quickAmounts = [10, 50, 100, 500];
   const dialpadKeys: Array<{ label: string; onPress: () => void; node?: ReactNode }> = [
     { label: "1", onPress: () => appendDigit("1") },
     { label: "2", onPress: () => appendDigit("2") },
