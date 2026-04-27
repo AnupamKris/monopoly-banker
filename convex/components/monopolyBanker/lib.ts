@@ -665,6 +665,10 @@ export const transfer = mutation({
     const recipient = await ctx.db.get(args.recipientId as any) as any;
     if (!recipient) throw new Error("Recipient not found");
 
+    if (sender._id === recipient._id) {
+      throw new Error("Cannot transfer money to yourself");
+    }
+
     if (sender.balance < args.amount) {
       throw new Error("Insufficient balance");
     }

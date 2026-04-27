@@ -179,44 +179,88 @@ export default function MonopolyBankerApp() {
   }
 
   return (
-    <div className="min-h-svh p-6">
-      <div className="mx-auto max-w-2xl space-y-6">
-        <div className="text-center space-y-2">
-          <h1 className="text-2xl font-heading font-medium">Monopoly Banker</h1>
-          <p className="text-xs text-muted-foreground">Manage your game finances</p>
+    <div className="min-h-svh p-6 flex flex-col items-center justify-center">
+      <div className="w-full max-w-sm space-y-8">
+        <div className="text-center space-y-2 mb-8">
+          <h1 className="text-4xl font-heading font-medium">Monopoly Banker</h1>
+          <p className="text-sm text-muted-foreground">Manage your game finances</p>
         </div>
 
-        <Tabs defaultValue="profile">
-          <TabsList className="w-full justify-start">
-            <TabsTrigger value="profile" className="gap-2">
-              <UserCircleIcon weight="duotone" /> Profile
-            </TabsTrigger>
-            <TabsTrigger value="create" className="gap-2">
-              <UserPlusIcon weight="duotone" /> Create Room
-            </TabsTrigger>
-            <TabsTrigger value="join" className="gap-2">
-              <ArrowRightIcon weight="duotone" /> Join Room
-            </TabsTrigger>
-          </TabsList>
+        <div className="flex flex-col gap-4">
+          <Dialog>
+            <DialogTrigger render={<Button variant="outline" className="w-full h-14 text-lg justify-start gap-3">
+                <UserCircleIcon weight="duotone" className="w-6 h-6" /> Profile
+              </Button>}>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Profile</DialogTitle>
+                <DialogDescription>Manage your player name.</DialogDescription>
+              </DialogHeader>
+              <ProfileTab playerName={playerName} onSaveName={saveName} />
+            </DialogContent>
+          </Dialog>
 
-          <TabsContent value="profile" className="space-y-4">
-            <ProfileTab playerName={playerName} onSaveName={saveName} roomHistory={roomHistory} onRemoveHistory={removeFromHistory} />
-          </TabsContent>
+          <Dialog>
+            <DialogTrigger render={<Button className="w-full h-14 text-lg justify-start gap-3">
+                <UserPlusIcon weight="duotone" className="w-6 h-6" /> Create Room
+              </Button>}>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Create Room</DialogTitle>
+                <DialogDescription>Start a new Monopoly session as the banker.</DialogDescription>
+              </DialogHeader>
+              <CreateRoomTab playerName={playerName} connectionId={connectionId} onRoomCreated={(roomId, playerId, isAdmin, code, name) => enterRoom(roomId, playerId, isAdmin, code, name)} />
+            </DialogContent>
+          </Dialog>
 
-          <TabsContent value="create">
-            <CreateRoomTab playerName={playerName} connectionId={connectionId} onRoomCreated={(roomId, playerId, isAdmin, code, name) => enterRoom(roomId, playerId, isAdmin, code, name)} />
-          </TabsContent>
+          <Dialog>
+            <DialogTrigger render={<Button variant="secondary" className="w-full h-14 text-lg justify-start gap-3">
+                <ArrowRightIcon weight="duotone" className="w-6 h-6" /> Join Room
+              </Button>}>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Join Room</DialogTitle>
+                <DialogDescription>Enter a room code to join an existing game.</DialogDescription>
+              </DialogHeader>
+              <JoinRoomTab playerName={playerName} connectionId={connectionId} onRoomJoined={(roomId, playerId, isAdmin, code, name) => enterRoom(roomId, playerId, isAdmin, code, name)} roomHistory={roomHistory} />
+            </DialogContent>
+          </Dialog>
+        </div>
 
-          <TabsContent value="join">
-            <JoinRoomTab playerName={playerName} connectionId={connectionId} onRoomJoined={(roomId, playerId, isAdmin, code, name) => enterRoom(roomId, playerId, isAdmin, code, name)} roomHistory={roomHistory} />
-          </TabsContent>
-        </Tabs>
+        {roomHistory.length > 0 && (
+          <div className="pt-8 space-y-4">
+            <h3 className="text-sm font-medium flex items-center gap-2 text-muted-foreground">
+              <ClockIcon weight="duotone" className="w-4 h-4" /> Recent Rooms
+            </h3>
+            <div className="space-y-2">
+              {roomHistory.map((room) => (
+                <div key={room.roomId} className="flex items-center justify-between p-3 bg-muted/30 border rounded-lg">
+                  <div>
+                    <p className="font-medium">{room.code}</p>
+                    <p className="text-xs text-muted-foreground">{room.name}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="secondary" size="sm" onClick={() => enterRoom(room.roomId, "", false, room.code, room.name)}>
+                      Join
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => removeFromHistory(room.roomId)}>
+                      <BackspaceIcon weight="duotone" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function ProfileTab({ playerName, onSaveName, roomHistory, onRemoveHistory }: { playerName: string; onSaveName: (name: string) => void; roomHistory: RoomHistory[]; onRemoveHistory: (roomId: string) => void }) {
+function ProfileTab({ playerName, onSaveName }: { playerName: string; onSaveName: (name: string) => void }) {
   const [name, setName] = useState(playerName);
   const [editing, setEditing] = useState(false);
 
@@ -228,56 +272,27 @@ function ProfileTab({ playerName, onSaveName, roomHistory, onRemoveHistory }: { 
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <UserCircleIcon weight="duotone" /> Your Profile
-        </CardTitle>
-        <CardDescription>Set your display name for game sessions</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {editing ? (
-          <div className="space-y-3">
-            <Input placeholder="Enter your name" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSave()} autoFocus />
-            <div className="flex gap-2">
-              <Button onClick={handleSave} size="sm">Save</Button>
-              <Button variant="ghost" size="sm" onClick={() => { setName(playerName); setEditing(false); }}>Cancel</Button>
-            </div>
+    <div className="space-y-4 pt-2">
+      {editing ? (
+        <div className="space-y-3">
+          <Input placeholder="Enter your name" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleSave()} autoFocus />
+          <div className="flex gap-2">
+            <Button onClick={handleSave} size="sm">Save</Button>
+            <Button variant="ghost" size="sm" onClick={() => { setName(playerName); setEditing(false); }}>Cancel</Button>
           </div>
-        ) : (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground">Display Name</p>
-                <p className="font-medium">{playerName || "Not set"}</p>
-              </div>
-              <Button variant="outline" size="sm" onClick={() => setEditing(true)}>Edit</Button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-muted-foreground">Display Name</p>
+              <p className="font-medium">{playerName || "Not set"}</p>
             </div>
+            <Button variant="outline" size="sm" onClick={() => setEditing(true)}>Edit</Button>
           </div>
-        )}
-
-        {roomHistory.length > 0 && (
-          <div className="space-y-3 pt-4 border-t">
-            <h3 className="text-xs font-medium flex items-center gap-2">
-              <ClockIcon weight="duotone" /> Recent Rooms
-            </h3>
-            <div className="space-y-2">
-              {roomHistory.map((room) => (
-                <div key={room.roomId} className="flex items-center justify-between p-2 bg-muted/50 rounded">
-                  <div>
-                    <p className="font-medium">{room.code}</p>
-                    <p className="text-xs text-muted-foreground">{room.name}</p>
-                  </div>
-                  <Button variant="ghost" size="icon-xs" onClick={() => onRemoveHistory(room.roomId)}>
-                    <span className="sr-only">Remove</span>
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -321,31 +336,23 @@ function CreateRoomTab({ playerName, connectionId, onRoomCreated }: { playerName
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <HouseLineIcon weight="duotone" /> Create Room
-        </CardTitle>
-        <CardDescription>Create a new game room and become the admin</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">Your Name</p>
-          <Input placeholder="Enter your name" value={name} onChange={(e) => setName(e.target.value)} />
-        </div>
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">Admin Password</p>
-          <Input type="password" placeholder="Create admin password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} />
-        </div>
-        <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">Confirm Password</p>
-          <Input type="password" placeholder="Confirm admin password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
-        </div>
-        {error && <p className="text-xs text-destructive">{error}</p>}
-        <Button onClick={handleCreate} disabled={loading} className="w-full">
-          {loading ? "Creating..." : "Create Room"}
-        </Button>
-      </CardContent>
+    <div className="space-y-4 pt-2">
+      <div className="space-y-2">
+        <p className="text-xs text-muted-foreground">Your Name</p>
+        <Input placeholder="Enter your name" value={name} onChange={(e) => setName(e.target.value)} />
+      </div>
+      <div className="space-y-2">
+        <p className="text-xs text-muted-foreground">Admin Password</p>
+        <Input type="password" placeholder="Create admin password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} />
+      </div>
+      <div className="space-y-2">
+        <p className="text-xs text-muted-foreground">Confirm Password</p>
+        <Input type="password" placeholder="Confirm admin password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <Button onClick={handleCreate} disabled={loading} className="w-full">
+        {loading ? "Creating..." : "Create Room"}
+      </Button>
 
       <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) handleEnterRoom(); else setDialogOpen(true); }}>
         <DialogContent>
@@ -361,7 +368,7 @@ function CreateRoomTab({ playerName, connectionId, onRoomCreated }: { playerName
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+    </div>
   );
 }
 
@@ -418,66 +425,58 @@ function JoinRoomTab({ playerName, connectionId, onRoomJoined, roomHistory }: { 
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <UsersIcon weight="duotone" /> Join Room
-        </CardTitle>
-        <CardDescription>Enter a room code to join the game</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "code" | "admin")}>
-          <TabsList className="w-full">
-            <TabsTrigger value="code" className="flex-1">Join as Player</TabsTrigger>
-            <TabsTrigger value="admin" className="flex-1">Join as Admin</TabsTrigger>
-          </TabsList>
+    <div className="space-y-4 pt-2">
+      <Tabs value={tab} onValueChange={(v) => setTab(v as "code" | "admin")}>
+        <TabsList className="w-full">
+          <TabsTrigger value="code" className="flex-1">Join as Player</TabsTrigger>
+          <TabsTrigger value="admin" className="flex-1">Join as Admin</TabsTrigger>
+        </TabsList>
 
-          <TabsContent value="code" className="space-y-4 pt-4">
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">Your Name</p>
-              <Input placeholder="Enter your name" value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">Room Code</p>
-              <Input placeholder="Enter 6-character code" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} maxLength={6} className="text-center font-mono tracking-widest" />
-            </div>
-            {error && <p className="text-xs text-destructive">{error}</p>}
-            <Button onClick={handleJoin} disabled={loading} className="w-full">
-              {loading ? "Joining..." : "Join Room"}
-            </Button>
-          </TabsContent>
-
-          <TabsContent value="admin" className="space-y-4 pt-4">
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">Room Code</p>
-              <Input placeholder="Enter 6-character code" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} maxLength={6} className="text-center font-mono tracking-widest" />
-            </div>
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground">Admin Password</p>
-              <Input type="password" placeholder="Enter admin password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} />
-            </div>
-            {error && <p className="text-xs text-destructive">{error}</p>}
-            <Button onClick={handleAdminJoin} disabled={loading} className="w-full">
-              {loading ? "Joining..." : "Login as Admin"}
-            </Button>
-          </TabsContent>
-        </Tabs>
-
-        {roomHistory.length > 0 && (
-          <div className="space-y-2 pt-4 border-t">
-            <h3 className="text-xs font-medium text-muted-foreground">Quick Join from History</h3>
-            <div className="space-y-1">
-              {roomHistory.map((room) => (
-                <Button key={room.roomId} variant="ghost" className="w-full justify-between" onClick={() => { setCode(room.code); }}>
-                  <span className="font-mono">{room.code}</span>
-                  <span className="text-xs text-muted-foreground">{room.name}</span>
-                </Button>
-              ))}
-            </div>
+        <TabsContent value="code" className="space-y-4 pt-4">
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Your Name</p>
+            <Input placeholder="Enter your name" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
-        )}
-      </CardContent>
-    </Card>
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Room Code</p>
+            <Input placeholder="Enter 6-character code" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} maxLength={6} className="text-center font-mono tracking-widest" />
+          </div>
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          <Button onClick={handleJoin} disabled={loading} className="w-full">
+            {loading ? "Joining..." : "Join Room"}
+          </Button>
+        </TabsContent>
+
+        <TabsContent value="admin" className="space-y-4 pt-4">
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Room Code</p>
+            <Input placeholder="Enter 6-character code" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} maxLength={6} className="text-center font-mono tracking-widest" />
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Admin Password</p>
+            <Input type="password" placeholder="Enter admin password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} />
+          </div>
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          <Button onClick={handleAdminJoin} disabled={loading} className="w-full">
+            {loading ? "Joining..." : "Login as Admin"}
+          </Button>
+        </TabsContent>
+      </Tabs>
+
+      {roomHistory.length > 0 && (
+        <div className="space-y-2 pt-4 border-t">
+          <h3 className="text-xs font-medium text-muted-foreground">Quick Join from History</h3>
+          <div className="space-y-1">
+            {roomHistory.map((room) => (
+              <Button key={room.roomId} variant="ghost" className="w-full justify-between" onClick={() => { setCode(room.code); }}>
+                <span className="font-mono">{room.code}</span>
+                <span className="text-xs text-muted-foreground">{room.name}</span>
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -750,10 +749,10 @@ function BalanceTransferTab({ roomId, playerId, connectionId, isAdmin }: { roomI
 
       <div className="flex gap-2 mt-4">
         <Button variant="outline" className="flex-1" onClick={() => openBankDrawer("deposit")}>
-          <PlusCircleIcon weight="duotone" className="mr-1" /> Send to Bank
+          <MinusCircleIcon weight="duotone" className="mr-1" /> To Bank
         </Button>
         <Button variant="outline" className="flex-1" onClick={() => openBankDrawer("withdraw")}>
-          <MinusCircleIcon weight="duotone" className="mr-1" /> Ask from Bank
+          <PlusCircleIcon weight="duotone" className="mr-1" /> From Bank
         </Button>
       </div>
 
@@ -766,7 +765,7 @@ function BalanceTransferTab({ roomId, playerId, connectionId, isAdmin }: { roomI
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 gap-2">
-            {players?.map((player) => (
+            {players?.filter(p => p._id !== playerId).map((player) => (
               <div
                 key={player._id}
                 onClick={() => openDialpad(player)}
