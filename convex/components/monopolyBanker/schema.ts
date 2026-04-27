@@ -26,6 +26,7 @@ export default defineSchema({
   moneyRequests: defineTable({
     roomId: v.id("rooms"),
     playerId: v.id("players"),
+    type: v.union(v.literal("money_request"), v.literal("bank_request")),
     amount: v.number(),
     reason: v.string(),
     status: v.union(v.literal("pending"), v.literal("approved"), v.literal("rejected")),
@@ -46,7 +47,9 @@ export default defineSchema({
       v.literal("player_left"),
       v.literal("player_kicked"),
       v.literal("transfer"),
-      v.literal("transfer_received")
+      v.literal("transfer_received"),
+      v.literal("bank_deposit"),
+      v.literal("bank_withdrawal")
     ),
     amount: v.optional(v.number()),
     targetPlayerId: v.optional(v.id("players")),

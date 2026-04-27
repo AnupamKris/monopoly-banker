@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo, type ReactNode } from "react";
 import { api } from "@/convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
+import { toast } from "sonner";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
@@ -17,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { UsersIcon, HouseLineIcon, UserCircleIcon, ArrowRightIcon, CopyIcon, CheckIcon, SignOutIcon, WalletIcon, ArrowsLeftRightIcon, ShieldIcon, ClockIcon, UserPlusIcon, MinusCircleIcon, PlusCircleIcon, BackspaceIcon, PaperPlaneTiltIcon, UserMinusIcon } from "@phosphor-icons/react";
+import { UsersIcon, HouseLineIcon, UserCircleIcon, ArrowRightIcon, CopyIcon, CheckIcon, SignOutIcon, WalletIcon, ArrowsLeftRightIcon, ShieldIcon, ClockIcon, UserPlusIcon, MinusCircleIcon, PlusCircleIcon, BackspaceIcon, PaperPlaneTiltIcon, UserMinusIcon, VaultIcon } from "@phosphor-icons/react";
 
 const CURRENT_ROOM_KEY = "monopolyCurrentRoom";
 
@@ -485,6 +486,21 @@ function GamePage({ roomId, playerId, isAdmin, connectionId, onLeave }: { roomId
   const players = useQuery(api.monopolyBanker.getPlayers, { roomId }) as Player[] | undefined;
   const leaveRoomMutation = useMutation(api.monopolyBanker.leaveRoom);
   const leftRef = useRef(false);
+  const prevBalancesRef = useRef<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    if (players) {
+      for (const player of players) {
+        const prevBalance = prevBalancesRef.current.get(player._id);
+        if (prevBalance !== undefined && player.balance > prevBalance && player._id === playerId) {
+          toast.success(`You received $${(player.balance - prevBalance).toLocaleString()}`, {
+            description: "Money was transferred to you",
+          });
+        }
+        prevBalancesRef.current.set(player._id, player.balance);
+      }
+    }
+  }, [players, playerId]);
 
   useEffect(() => {
     if (players === undefined) return;
@@ -526,9 +542,6 @@ function GamePage({ roomId, playerId, isAdmin, connectionId, onLeave }: { roomId
             <TabsTrigger value="balance" className="flex-1 gap-2">
               <WalletIcon weight="duotone" /> Balance
             </TabsTrigger>
-            <TabsTrigger value="transfer" className="flex-1 gap-2">
-              <ArrowsLeftRightIcon weight="duotone" /> Transfer
-            </TabsTrigger>
             {isAdmin && (
               <TabsTrigger value="admin" className="flex-1 gap-2">
                 <ShieldIcon weight="duotone" /> Admin
@@ -537,11 +550,7 @@ function GamePage({ roomId, playerId, isAdmin, connectionId, onLeave }: { roomId
           </TabsList>
 
           <TabsContent value="balance" className="pt-4">
-            <BalanceTab roomId={roomId} playerId={playerId} connectionId={connectionId} isAdmin={isAdmin} />
-          </TabsContent>
-
-          <TabsContent value="transfer" className="pt-4">
-            <TransferTab roomId={roomId} playerId={playerId} connectionId={connectionId} />
+            <BalanceTransferTab roomId={roomId} playerId={playerId} connectionId={connectionId} isAdmin={isAdmin} />
           </TabsContent>
 
           {isAdmin && (
@@ -555,10 +564,26 @@ function GamePage({ roomId, playerId, isAdmin, connectionId, onLeave }: { roomId
   );
 }
 
-function BalanceTab({ roomId, playerId, connectionId, isAdmin }: { roomId: string; playerId: string; connectionId: string; isAdmin: boolean }) {
+function BalanceTransferTab({ roomId, playerId, connectionId, isAdmin }: { roomId: string; playerId: string; connectionId: string; isAdmin: boolean }) {
   const players = useQuery(api.monopolyBanker.getPlayers, { roomId }) as Player[] | undefined;
   const kickPlayer = useMutation(api.monopolyBanker.kickPlayer);
+  const transferMoney = useMutation(api.monopolyBanker.transfer);
+  const sendToBankMutation = useMutation(api.monopolyBanker.sendToBank);
+  const requestFromBankMutation = useMutation(api.monopolyBanker.requestFromBank);
   const [kicking, setKicking] = useState<string | null>(null);
+  const [recipient, setRecipient] = useState<Player | null>(null);
+  const [amount, setAmount] = useState("");
+  const [reason, setReason] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const [bankAction, setBankAction] = useState<"deposit" | "withdraw" | null>(null);
+  const [bankAmount, setBankAmount] = useState("");
+  const [bankReason, setBankReason] = useState("");
+  const [bankLoading, setBankLoading] = useState(false);
+  const [bankError, setBankError] = useState("");
+  const [bankSuccess, setBankSuccess] = useState(false);
+
   const currentPlayer = players?.find(p => p._id === playerId);
 
   const handleKick = async (player: Player) => {
@@ -573,56 +598,356 @@ function BalanceTab({ roomId, playerId, connectionId, isAdmin }: { roomId: strin
     }
   };
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <WalletIcon weight="duotone" /> Your Balance
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {currentPlayer ? (
-          <div className="text-center py-8">
-            <p className="text-xs text-muted-foreground mb-1">Current Balance</p>
-            <p className="text-5xl font-mono font-bold">${currentPlayer.balance.toLocaleString()}</p>
-          </div>
-        ) : (
-          <div className="text-center py-8 text-muted-foreground">
-            <p>Loading balance...</p>
-          </div>
-        )}
+  const openDialpad = (player: Player) => {
+    setRecipient(player);
+    setAmount("");
+    setReason("");
+    setError("");
+    setSuccess(false);
+  };
 
-        <div className="border-t pt-4">
-          <h3 className="text-xs font-medium text-muted-foreground mb-2">All Players</h3>
-          <div className="space-y-2">
+  const closeDialpad = () => {
+    setRecipient(null);
+  };
+
+  const handleDrawerOpenChange = (open: boolean) => {
+    if (!open) closeDialpad();
+  };
+
+  const appendDigit = (d: string) => {
+    setError("");
+    setAmount((prev) => {
+      const next = (prev + d).replace(/^0+(?=\d)/, "");
+      if (next.length > 9) return prev;
+      return next;
+    });
+  };
+
+  const deleteDigit = () => {
+    setError("");
+    setAmount((prev) => prev.slice(0, -1));
+  };
+
+  const setQuickAmount = (value: number) => {
+    setError("");
+    setAmount(String(value));
+  };
+
+  const openBankDrawer = (action: "deposit" | "withdraw") => {
+    setBankAction(action);
+    setBankAmount("");
+    setBankReason("");
+    setBankError("");
+    setBankSuccess(false);
+  };
+
+  const closeBankDrawer = () => {
+    setBankAction(null);
+  };
+
+  const handleBankDrawerOpenChange = (open: boolean) => {
+    if (!open) closeBankDrawer();
+  };
+
+  const handleBankSubmit = async () => {
+    const amountNum = parseInt(bankAmount || "0", 10);
+    if (!amountNum || amountNum <= 0) { setBankError("Enter an amount"); return; }
+
+    if (bankAction === "deposit" && currentPlayer && amountNum > currentPlayer.balance) {
+      setBankError("Insufficient balance"); return;
+    }
+
+    setBankError("");
+    setBankLoading(true);
+    setBankSuccess(false);
+
+    try {
+      if (bankAction === "deposit") {
+        await sendToBankMutation({ playerId, amount: amountNum, reason: bankReason, connectionId });
+        setBankSuccess(true);
+        setTimeout(() => {
+          closeBankDrawer();
+          setBankSuccess(false);
+        }, 700);
+      } else {
+        await requestFromBankMutation({ playerId, amount: amountNum, reason: bankReason, connectionId });
+        setBankSuccess(true);
+        setTimeout(() => {
+          closeBankDrawer();
+          setBankSuccess(false);
+        }, 700);
+      }
+    } catch (e: any) {
+      setBankError(e.message || "Transaction failed");
+    } finally {
+      setBankLoading(false);
+    }
+  };
+
+  const bankAmountNum = parseInt(bankAmount || "0", 10);
+  const bankInsufficient = bankAction === "deposit" && !!currentPlayer && bankAmountNum > currentPlayer.balance;
+
+  const handleTransfer = async () => {
+    if (!recipient) return;
+    const amountNum = parseInt(amount || "0", 10);
+    if (!amountNum || amountNum <= 0) { setError("Enter an amount"); return; }
+    if (currentPlayer && amountNum > currentPlayer.balance) { setError("Insufficient balance"); return; }
+
+    setError("");
+    setLoading(true);
+    setSuccess(false);
+
+    try {
+      await transferMoney({ senderId: playerId, recipientId: recipient._id, amount: amountNum, reason, connectionId });
+      setSuccess(true);
+      setTimeout(() => {
+        closeDialpad();
+        setSuccess(false);
+      }, 700);
+    } catch (e: any) {
+      setError(e.message || "Transfer failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const amountNum = parseInt(amount || "0", 10);
+  const insufficient = !!currentPlayer && amountNum > currentPlayer.balance;
+
+  const quickAmounts = [10, 50, 100, 500, 1000];
+  const dialpadKeys: Array<{ label: string; onPress: () => void; node?: ReactNode }> = [
+    { label: "1", onPress: () => appendDigit("1") },
+    { label: "2", onPress: () => appendDigit("2") },
+    { label: "3", onPress: () => appendDigit("3") },
+    { label: "4", onPress: () => appendDigit("4") },
+    { label: "5", onPress: () => appendDigit("5") },
+    { label: "6", onPress: () => appendDigit("6") },
+    { label: "7", onPress: () => appendDigit("7") },
+    { label: "8", onPress: () => appendDigit("8") },
+    { label: "9", onPress: () => appendDigit("9") },
+    { label: "00", onPress: () => appendDigit("00") },
+    { label: "0", onPress: () => appendDigit("0") },
+    { label: "backspace", onPress: deleteDigit, node: <BackspaceIcon weight="duotone" className="size-5" /> },
+  ];
+
+  return (
+    <>
+      <Card>
+        
+        <CardContent>
+          {currentPlayer ? (
+            <div className="text-center py-4">
+              <p className="text-xs text-muted-foreground mb-1">Current Balance</p>
+              <p className="text-5xl font-mono font-bold">${currentPlayer.balance.toLocaleString()}</p>
+            </div>
+          ) : (
+            <div className="text-center py-4 text-muted-foreground">
+              <p>Loading balance...</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="flex gap-2 mt-4">
+        <Button variant="outline" className="flex-1" onClick={() => openBankDrawer("deposit")}>
+          <PlusCircleIcon weight="duotone" className="mr-1" /> Send to Bank
+        </Button>
+        <Button variant="outline" className="flex-1" onClick={() => openBankDrawer("withdraw")}>
+          <MinusCircleIcon weight="duotone" className="mr-1" /> Ask from Bank
+        </Button>
+      </div>
+
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <UsersIcon weight="duotone" /> All Players
+          </CardTitle>
+          <CardDescription>Tap a player to transfer money</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-2">
             {players?.map((player) => (
-              <div key={player._id} className="flex items-center justify-between p-2 bg-muted/50 rounded">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{player.name}</span>
-                  {player.isAdmin && <ShieldIcon weight="fill" className="text-primary" />}
-                  {player._id === playerId && <span className="text-xs text-muted-foreground">(you)</span>}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono">${player.balance.toLocaleString()}</span>
+              <div
+                key={player._id}
+                onClick={() => openDialpad(player)}
+                className="border rounded-lg p-3 flex flex-col items-stretch gap-1 cursor-pointer hover:bg-muted/50 transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1 font-medium truncate">
+                    {player.name}
+                    {player.isAdmin && <ShieldIcon weight="fill" className="text-primary size-3" />}
+                    {player._id === playerId && <span className="text-xs text-muted-foreground">(you)</span>}
+                  </span>
                   {isAdmin && player._id !== playerId && (
                     <Button
                       variant="ghost"
                       size="icon-xs"
-                      onClick={() => handleKick(player)}
+                      onClick={(e) => { e.stopPropagation(); handleKick(player); }}
                       disabled={kicking === player._id}
                       title={`Kick ${player.name}`}
+                      className="h-6 w-6"
                     >
-                      <UserMinusIcon weight="duotone" className="text-destructive" />
-                      <span className="sr-only">Kick {player.name}</span>
+                      <UserMinusIcon weight="duotone" className="text-destructive size-3" />
                     </Button>
                   )}
                 </div>
+                <span className="font-mono text-xs text-muted-foreground text-left">
+                  ${player.balance.toLocaleString()}
+                </span>
               </div>
             ))}
           </div>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+
+      <Drawer open={!!recipient} onOpenChange={handleDrawerOpenChange}>
+        <DrawerContent>
+          <DrawerHeader>
+            <DrawerTitle className="flex items-center justify-center gap-2">
+              <PaperPlaneTiltIcon weight="duotone" />
+              Send to {recipient?.name}
+            </DrawerTitle>
+            <DrawerDescription className="text-center">
+              Your balance: ${currentPlayer?.balance.toLocaleString() ?? 0}
+            </DrawerDescription>
+          </DrawerHeader>
+
+          <div className="px-4 pb-2 space-y-4">
+            <div className="text-center py-2">
+              <p className="text-xs text-muted-foreground">Amount</p>
+              <p
+                className={cn(
+                  "font-mono font-bold text-5xl tabular-nums tracking-tight",
+                  insufficient ? "text-destructive" : amount ? "text-foreground" : "text-muted-foreground/50"
+                )}
+              >
+                ${amountNum.toLocaleString()}
+              </p>
+            </div>
+
+            <div className="flex gap-1.5 justify-center flex-wrap">
+              {quickAmounts.map((q) => (
+                <Button
+                  key={q}
+                  size="xs"
+                  variant="secondary"
+                  onClick={() => setQuickAmount(q)}
+                >
+                  +${q}
+                </Button>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {dialpadKeys.map((k) => (
+                <Button
+                  key={k.label}
+                  variant="outline"
+                  onClick={k.onPress}
+                  className="h-12 text-lg font-mono"
+                >
+                  {k.node ?? k.label}
+                </Button>
+              ))}
+            </div>
+
+            <Input
+              placeholder="Reason (optional)"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            />
+
+            {error && <p className="text-xs text-destructive text-center">{error}</p>}
+            {success && <p className="text-xs text-green-600 text-center">Transfer sent!</p>}
+          </div>
+
+          <DrawerFooter>
+            <Button
+              onClick={handleTransfer}
+              disabled={loading || !amountNum || insufficient}
+              className="w-full"
+            >
+              {loading ? "Sending..." : "Send Money"}
+            </Button>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
+
+      <Drawer open={!!bankAction} onOpenChange={handleBankDrawerOpenChange}>
+        <DrawerContent>
+          <DrawerHeader>
+            <DrawerTitle className="flex items-center justify-center gap-2">
+              {bankAction === "deposit" ? <PlusCircleIcon weight="duotone" /> : <MinusCircleIcon weight="duotone" />}
+              {bankAction === "deposit" ? "Deposit to Bank" : "Ask from Bank"}
+            </DrawerTitle>
+            <DrawerDescription className="text-center">
+              {bankAction === "deposit"
+                ? `Your balance: $${currentPlayer?.balance.toLocaleString() ?? 0}`
+                : "Bank balance: ∞"}
+            </DrawerDescription>
+          </DrawerHeader>
+
+          <div className="px-4 pb-2 space-y-4">
+            <div className="text-center py-2">
+              <p className="text-xs text-muted-foreground">Amount</p>
+              <p
+                className={cn(
+                  "font-mono font-bold text-5xl tabular-nums tracking-tight",
+                  bankInsufficient ? "text-destructive" : bankAmount ? "text-foreground" : "text-muted-foreground/50"
+                )}
+              >
+                ${bankAmountNum.toLocaleString()}
+              </p>
+            </div>
+
+            <div className="flex gap-1.5 justify-center flex-wrap">
+              {quickAmounts.map((q) => (
+                <Button
+                  key={q}
+                  size="xs"
+                  variant="secondary"
+                  onClick={() => { setBankError(""); setBankAmount(String(q)); }}
+                >
+                  {bankAction === "deposit" ? "+" : "-"}${q}
+                </Button>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {dialpadKeys.map((k) => (
+                <Button
+                  key={k.label}
+                  variant="outline"
+                  onClick={() => { setBankError(""); setBankAmount((prev) => { const next = (prev + k.label).replace(/^0+(?=\d)/, ""); return next.length > 9 ? prev : next; }); }}
+                  className="h-12 text-lg font-mono"
+                >
+                  {k.node ?? k.label}
+                </Button>
+              ))}
+            </div>
+
+            <Input
+              placeholder="Reason (optional)"
+              value={bankReason}
+              onChange={(e) => setBankReason(e.target.value)}
+            />
+
+            {bankError && <p className="text-xs text-destructive text-center">{bankError}</p>}
+            {bankSuccess && <p className="text-xs text-green-600 text-center">Transaction complete!</p>}
+          </div>
+
+          <DrawerFooter>
+            <Button
+              onClick={handleBankSubmit}
+              disabled={bankLoading || !bankAmountNum || bankInsufficient}
+              className="w-full"
+            >
+              {bankLoading ? "Processing..." : bankAction === "deposit" ? "Deposit" : "Withdraw"}
+            </Button>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
+    </>
   );
 }
 
@@ -844,6 +1169,7 @@ function AdminTab({ roomId, connectionId }: { roomId: string; connectionId: stri
       <TabsList className="w-full">
         <TabsTrigger value="requests" className="flex-1 text-xs">Requests</TabsTrigger>
         <TabsTrigger value="adjust" className="flex-1 text-xs">Adjust</TabsTrigger>
+        <TabsTrigger value="bank" className="flex-1 text-xs">Bank</TabsTrigger>
         <TabsTrigger value="log" className="flex-1 text-xs">Log</TabsTrigger>
       </TabsList>
 
@@ -853,6 +1179,10 @@ function AdminTab({ roomId, connectionId }: { roomId: string; connectionId: stri
 
       <TabsContent value="adjust" className="pt-4">
         <ManualAdjustPanel roomId={roomId} connectionId={connectionId} />
+      </TabsContent>
+
+      <TabsContent value="bank" className="pt-4">
+        <AdminBankPanel roomId={roomId} connectionId={connectionId} />
       </TabsContent>
 
       <TabsContent value="log" className="pt-4">
@@ -1018,6 +1348,84 @@ function ManualAdjustPanel({ roomId, connectionId }: { roomId: string; connectio
         <Button onClick={handleAdjust} disabled={loading} className="w-full">
           {loading ? "Adjusting..." : "Adjust Balance"}
         </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AdminBankPanel({ roomId, connectionId }: { roomId: string; connectionId: string }) {
+  const pendingRequests = useQuery(api.monopolyBanker.getPendingRequests, { roomId }) as any[] | undefined;
+  const approveRequest = useMutation(api.monopolyBanker.approveRequest);
+  const rejectRequest = useMutation(api.monopolyBanker.rejectRequest);
+  const [processing, setProcessing] = useState<string | null>(null);
+
+  const bankRequests = pendingRequests?.filter(r => r.type === "bank_request") ?? [];
+
+  const handleApprove = async (requestId: string) => {
+    setProcessing(requestId);
+    try {
+      await approveRequest({ requestId, connectionId });
+    } catch (e: any) {
+      alert(e.message || "Failed to approve request");
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  const handleReject = async (requestId: string) => {
+    setProcessing(requestId);
+    try {
+      await rejectRequest({ requestId, connectionId });
+    } catch (e: any) {
+      alert(e.message || "Failed to reject request");
+    } finally {
+      setProcessing(null);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <VaultIcon weight="duotone" /> Bank Withdrawal Requests
+        </CardTitle>
+        <CardDescription>Pending requests from players</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {bankRequests.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-4">No pending requests</p>
+        ) : (
+          bankRequests.map((req) => (
+            <div key={req._id} className="border rounded-lg p-3 space-y-2">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="font-medium text-sm">{req.playerName}</p>
+                  <p className="text-2xl font-mono font-bold">${req.amount.toLocaleString()}</p>
+                  {req.reason && <p className="text-xs text-muted-foreground">{req.reason}</p>}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => handleApprove(req._id)}
+                  disabled={processing === req._id}
+                >
+                  {processing === req._id ? "..." : "Approve"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="flex-1"
+                  onClick={() => handleReject(req._id)}
+                  disabled={processing === req._id}
+                >
+                  {processing === req._id ? "..." : "Reject"}
+                </Button>
+              </div>
+            </div>
+          ))
+        )}
       </CardContent>
     </Card>
   );

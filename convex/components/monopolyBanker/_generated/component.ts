@@ -24,6 +24,18 @@ import type { FunctionReference } from "convex/server";
 export type ComponentApi<Name extends string | undefined = string | undefined> =
   {
     lib: {
+      adminBankWithdraw: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          amount: number;
+          connectionId: string;
+          playerId: string;
+          reason: string;
+        },
+        null,
+        Name
+      >;
       approveRequest: FunctionReference<
         "mutation",
         "internal",
@@ -61,6 +73,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           playerName: string;
           reason: string;
           status: string;
+          type: string;
         }>,
         Name
       >;
@@ -165,6 +178,30 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           roomId?: string;
           success: boolean;
         },
+        Name
+      >;
+      requestFromBank: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          amount: number;
+          connectionId: string;
+          playerId: string;
+          reason: string;
+        },
+        string,
+        Name
+      >;
+      sendToBank: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          amount: number;
+          connectionId: string;
+          playerId: string;
+          reason: string;
+        },
+        null,
         Name
       >;
       transfer: FunctionReference<

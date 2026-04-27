@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { cn } from "@/lib/utils";
 import { ConvexClientProvider } from "@/components/convex-provider";
 import { SerwistProvider } from "@/components/serwist-provider";
+import { Toaster } from "@/components/ui/sonner";
 
 const APP_NAME = "new-mono";
 const APP_DEFAULT_TITLE = "new-mono";
@@ -20,10 +21,22 @@ export const metadata: Metadata = {
     template: APP_TITLE_TEMPLATE,
   },
   description: APP_DESCRIPTION,
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    shortcut: "/favicon.ico",
+    apple: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
     title: APP_DEFAULT_TITLE,
+    startupImage: ["/icons/icon-512.png"],
   },
   formatDetection: {
     telephone: false,
@@ -72,7 +85,10 @@ export default function RootLayout({
       <body>
         <SerwistProvider swUrl="/serwist/sw.js">
           <ConvexClientProvider>
-            <ThemeProvider>{children}</ThemeProvider>
+            <ThemeProvider>
+              {children}
+            </ThemeProvider>
+            <Toaster />
           </ConvexClientProvider>
         </SerwistProvider>
       </body>

@@ -159,6 +159,7 @@ export const getPendingRequests = query({
   returns: v.array(
     v.object({
       _id: v.string(),
+      type: v.string(),
       playerId: v.string(),
       playerName: v.string(),
       amount: v.number(),
@@ -274,6 +275,60 @@ export const transfer = mutation({
     return await ctx.runMutation(components.monopolyBanker.lib.transfer, {
       senderId: args.senderId,
       recipientId: args.recipientId,
+      amount: args.amount,
+      reason: args.reason,
+      connectionId: args.connectionId,
+    });
+  },
+});
+
+export const sendToBank = mutation({
+  args: {
+    playerId: v.string(),
+    amount: v.number(),
+    reason: v.string(),
+    connectionId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    return await ctx.runMutation(components.monopolyBanker.lib.sendToBank, {
+      playerId: args.playerId,
+      amount: args.amount,
+      reason: args.reason,
+      connectionId: args.connectionId,
+    });
+  },
+});
+
+export const requestFromBank = mutation({
+  args: {
+    playerId: v.string(),
+    amount: v.number(),
+    reason: v.string(),
+    connectionId: v.string(),
+  },
+  returns: v.string(),
+  handler: async (ctx, args) => {
+    return await ctx.runMutation(components.monopolyBanker.lib.requestFromBank, {
+      playerId: args.playerId,
+      amount: args.amount,
+      reason: args.reason,
+      connectionId: args.connectionId,
+    });
+  },
+});
+
+export const adminBankWithdraw = mutation({
+  args: {
+    playerId: v.string(),
+    amount: v.number(),
+    reason: v.string(),
+    connectionId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    return await ctx.runMutation(components.monopolyBanker.lib.adminBankWithdraw, {
+      playerId: args.playerId,
       amount: args.amount,
       reason: args.reason,
       connectionId: args.connectionId,

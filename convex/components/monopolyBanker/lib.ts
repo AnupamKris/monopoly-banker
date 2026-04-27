@@ -361,6 +361,46 @@ export const createMoneyRequest = mutation({
     const requestId = await ctx.db.insert("moneyRequests", {
       roomId: args.roomId as any,
       playerId: args.playerId as any,
+      type: "money_request",
+      amount: args.amount,
+      reason: args.reason,
+      status: "pending",
+      createdAt: Date.now(),
+    });
+
+    return requestId.toString();
+  },
+});
+
+export const requestFromBank = mutation({
+  args: {
+    playerId: v.string(),
+    amount: v.number(),
+    reason: v.string(),
+    connectionId: v.string(),
+  },
+  returns: v.string(),
+  handler: async (ctx, args) => {
+    const player = await ctx.db.get(args.playerId as any) as any;
+    if (!player) throw new Error("Player not found");
+
+    const connectionPlayer = await ctx.db
+      .query("players")
+      .withIndex("by_connection", (q) => q.eq("connectionId", args.connectionId))
+      .first() as any;
+
+    if (!connectionPlayer || connectionPlayer._id !== player._id) {
+      throw new Error("You can only request money to your own account");
+    }
+
+    if (args.amount <= 0) {
+      throw new Error("Amount must be positive");
+    }
+
+    const requestId = await ctx.db.insert("moneyRequests", {
+      roomId: player.roomId,
+      playerId: player._id,
+      type: "bank_request",
       amount: args.amount,
       reason: args.reason,
       status: "pending",
@@ -378,6 +418,7 @@ export const getPendingRequests = query({
   returns: v.array(
     v.object({
       _id: v.string(),
+      type: v.string(),
       playerId: v.string(),
       playerName: v.string(),
       amount: v.number(),
@@ -399,6 +440,7 @@ export const getPendingRequests = query({
       const player = await ctx.db.get(req.playerId) as any;
       result.push({
         _id: req._id.toString(),
+        type: req.type,
         playerId: req.playerId.toString(),
         playerName: player?.name || "Unknown",
         amount: req.amount,
@@ -440,13 +482,16 @@ export const approveRequest = mutation({
       resolvedAt: Date.now(),
     });
 
+    const txType = request.type === "bank_request" ? "bank_withdrawal" : "request_approved";
     await ctx.db.insert("transactions", {
       roomId: player.roomId,
-      type: "request_approved",
+      type: txType,
       amount: request.amount,
       targetPlayerId: player._id,
       performedBy: performedByPlayer.name,
-      description: `Approved request: ${request.reason}`,
+      description: request.type === "bank_request"
+        ? `Approved bank withdrawal request: ${request.reason}`
+        : `Approved request: ${request.reason}`,
       createdAt: Date.now(),
     });
 
@@ -653,6 +698,92 @@ export const transfer = mutation({
       targetPlayerId: sender._id,
       performedBy: recipient.name,
       description: `Received from ${sender.name}: ${args.reason || "No reason"}`,
+      createdAt: Date.now(),
+    });
+
+    return null;
+  },
+});
+
+export const sendToBank = mutation({
+  args: {
+    playerId: v.string(),
+    amount: v.number(),
+    reason: v.string(),
+    connectionId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const player = await ctx.db.get(args.playerId as any) as any;
+    if (!player) throw new Error("Player not found");
+
+    const connectionPlayer = await ctx.db
+      .query("players")
+      .withIndex("by_connection", (q) => q.eq("connectionId", args.connectionId))
+      .first() as any;
+
+    if (!connectionPlayer || connectionPlayer._id !== player._id) {
+      throw new Error("You can only send money from your own account");
+    }
+
+    if (player.balance < args.amount) {
+      throw new Error("Insufficient balance");
+    }
+
+    if (args.amount <= 0) {
+      throw new Error("Amount must be positive");
+    }
+
+    await ctx.db.patch(player._id, { balance: player.balance - args.amount });
+
+    await ctx.db.insert("transactions", {
+      roomId: player.roomId,
+      type: "bank_deposit",
+      amount: args.amount,
+      targetPlayerId: player._id,
+      performedBy: player.name,
+      description: `Deposited to bank: ${args.reason || "No reason"}`,
+      createdAt: Date.now(),
+    });
+
+    return null;
+  },
+});
+
+export const adminBankWithdraw = mutation({
+  args: {
+    playerId: v.string(),
+    amount: v.number(),
+    reason: v.string(),
+    connectionId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const performedBy = await ctx.db
+      .query("players")
+      .withIndex("by_connection", (q) => q.eq("connectionId", args.connectionId))
+      .first() as any;
+
+    if (!performedBy?.isAdmin) {
+      throw new Error("Only admins can withdraw from the bank");
+    }
+
+    const player = await ctx.db.get(args.playerId as any) as any;
+    if (!player) throw new Error("Player not found");
+
+    if (args.amount <= 0) {
+      throw new Error("Amount must be positive");
+    }
+
+    await ctx.db.patch(player._id, { balance: player.balance + args.amount });
+
+    await ctx.db.insert("transactions", {
+      roomId: player.roomId,
+      type: "bank_withdrawal",
+      amount: args.amount,
+      targetPlayerId: player._id,
+      performedBy: performedBy.name,
+      description: `Admin withdrew from bank to give to ${player.name}: ${args.reason || "No reason"}`,
       createdAt: Date.now(),
     });
 
