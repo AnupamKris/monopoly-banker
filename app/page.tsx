@@ -175,7 +175,7 @@ export default function MonopolyBankerApp() {
   }
 
   if (showGamePage && currentRoom) {
-    return <GamePage roomId={currentRoom.roomId} playerId={currentRoom.playerId} isAdmin={currentRoom.isAdmin} connectionId={connectionId} onLeave={handleLeave} />;
+    return <GamePage roomId={currentRoom.roomId} code={currentRoom.code} playerId={currentRoom.playerId} isAdmin={currentRoom.isAdmin} connectionId={connectionId} onLeave={handleLeave} />;
   }
 
   return (
@@ -480,8 +480,9 @@ function JoinRoomTab({ playerName, connectionId, onRoomJoined, roomHistory }: { 
   );
 }
 
-function GamePage({ roomId, playerId, isAdmin, connectionId, onLeave }: { roomId: string; playerId: string; isAdmin: boolean; connectionId: string; onLeave: (opts?: { kicked?: boolean }) => void }) {
+function GamePage({ roomId, code, playerId, isAdmin, connectionId, onLeave }: { roomId: string; code: string; playerId: string; isAdmin: boolean; connectionId: string; onLeave: (opts?: { kicked?: boolean }) => void }) {
   const [activeTab, setActiveTab] = useState<string>("balance");
+  const [showHistory, setShowHistory] = useState(false);
   const players = useQuery(api.monopolyBanker.getPlayers, { roomId }) as Player[] | undefined;
   const leaveRoomMutation = useMutation(api.monopolyBanker.leaveRoom);
   const leftRef = useRef(false);
@@ -529,9 +530,19 @@ function GamePage({ roomId, playerId, isAdmin, connectionId, onLeave }: { roomId
             <span className="sr-only">Leave Room</span>
           </Button>
           <div>
-            <h1 className="font-heading font-medium">Monopoly Banker</h1>
-            <p className="text-xs text-muted-foreground">Room: {roomId.slice(0, 8)}...</p>
+            <h1 className="font-heading font-medium">Monopoly</h1>
           </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" onClick={() => setShowHistory(true)}>
+            <ClockIcon weight="duotone" className="text-primary" />
+            <span className="sr-only">Transaction History</span>
+          </Button>
+          <span className="text-sm font-mono bg-muted px-3 py-1.5 rounded-md">{code}</span>
+          <Button variant="ghost" size="icon" onClick={() => { navigator.clipboard.writeText(code); toast.success("Room code copied!"); }}>
+            <CopyIcon weight="bold" />
+            <span className="sr-only">Copy Room Code</span>
+          </Button>
         </div>
       </header>
 
@@ -559,6 +570,19 @@ function GamePage({ roomId, playerId, isAdmin, connectionId, onLeave }: { roomId
           )}
         </Tabs>
       </div>
+
+      <Drawer open={showHistory} onOpenChange={setShowHistory}>
+        <DrawerContent className="max-h-[85vh]">
+          <DrawerHeader>
+            <DrawerTitle className="flex items-center gap-2">
+              <ClockIcon weight="duotone" /> Transaction History
+            </DrawerTitle>
+          </DrawerHeader>
+          <div className="px-4 pb-4 overflow-y-auto max-h-[calc(85vh-120px)]">
+            <TransactionHistoryDrawer roomId={roomId} />
+          </div>
+        </DrawerContent>
+      </Drawer>
     </div>
   );
 }
@@ -917,7 +941,17 @@ function BalanceTransferTab({ roomId, playerId, connectionId, isAdmin }: { roomI
                 <Button
                   key={k.label}
                   variant="outline"
-                  onClick={() => { setBankError(""); setBankAmount((prev) => { const next = (prev + k.label).replace(/^0+(?=\d)/, ""); return next.length > 9 ? prev : next; }); }}
+                  onClick={() => {
+                    setBankError("");
+                    if (k.label === "backspace") {
+                      setBankAmount((prev) => prev.slice(0, -1));
+                    } else {
+                      setBankAmount((prev) => {
+                        const next = (prev + k.label).replace(/^0+(?=\d)/, "");
+                        return next.length > 9 ? prev : next;
+                      });
+                    }
+                  }}
                   className="h-12 text-lg font-mono"
                 >
                   {k.node ?? k.label}
@@ -1427,6 +1461,80 @@ function AdminBankPanel({ roomId, connectionId }: { roomId: string; connectionId
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function TransactionHistoryDrawer({ roomId }: { roomId: string }) {
+  const transactions = useQuery(api.monopolyBanker.getTransactionLog, { roomId, limit: 50 }) as Transaction[] | undefined;
+
+  const getTransactionIcon = (type: string) => {
+    switch (type) {
+      case "player_joined": return <UserPlusIcon weight="duotone" className="text-green-500" />;
+      case "player_left": return <UserMinusIcon weight="duotone" className="text-orange-500" />;
+      case "player_kicked": return <UserMinusIcon weight="duotone" className="text-red-500" />;
+      case "transfer": return <ArrowsLeftRightIcon weight="duotone" className="text-blue-500" />;
+      case "manual_add": return <PlusCircleIcon weight="duotone" className="text-green-500" />;
+      case "manual_remove": return <MinusCircleIcon weight="duotone" className="text-red-500" />;
+      case "request_approved": return <CheckIcon weight="bold" className="text-green-500" />;
+      case "request_rejected": return <CheckIcon weight="bold" className="text-red-500" />;
+      case "sent_to_bank": return <ArrowRightIcon weight="bold" className="text-blue-500" />;
+      case "requested_from_bank": return <ArrowRightIcon weight="bold" className="text-orange-500" />;
+      default: return <ClockIcon weight="duotone" />;
+    }
+  };
+
+  const getAmountColor = (type: string, amount?: number) => {
+    if (amount === undefined) return "";
+    if (type === "manual_remove" || type === "player_kicked" || type === "request_rejected" || type === "sent_to_bank") {
+      return "text-red-500";
+    }
+    return "text-green-500";
+  };
+
+  const formatTime = (timestamp: number) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    if (isToday) {
+      return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    }
+    return date.toLocaleDateString([], { month: "short", day: "numeric" }) + " " + date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
+
+  if (!transactions || transactions.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <ClockIcon weight="duotone" className="size-12 text-muted-foreground/50 mb-3" />
+        <p className="text-sm text-muted-foreground">No transactions yet</p>
+        <p className="text-xs text-muted-foreground/70 mt-1">Transactions will appear here</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      {transactions.map((tx) => (
+        <div
+          key={tx._id}
+          className="flex items-start gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors"
+        >
+          <div className="flex-shrink-0 mt-0.5">
+            {getTransactionIcon(tx.type)}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate">{tx.description}</p>
+            <p className="text-xs text-muted-foreground">
+              {tx.performedBy} · {formatTime(tx.createdAt)}
+            </p>
+          </div>
+          {tx.amount !== undefined && (
+            <span className={`font-mono text-sm font-semibold ${getAmountColor(tx.type, tx.amount)}`}>
+              {tx.type === "manual_remove" || tx.type === "player_kicked" || tx.type === "request_rejected" || tx.type === "sent_to_bank" ? "-" : "+"}${Math.abs(tx.amount).toLocaleString()}
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
   );
 }
 
