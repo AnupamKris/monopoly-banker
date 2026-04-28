@@ -1217,14 +1217,14 @@ function TransferTab({ roomId, playerId, connectionId }: { roomId: string; playe
   ];
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="py-4 sm:py-6">
+      <CardHeader className="px-4 sm:px-6 pb-3">
         <CardTitle className="flex items-center gap-2">
           <ArrowsLeftRightIcon weight="duotone" /> Transfer Money
         </CardTitle>
         <CardDescription>Tap a player to send money</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="px-4 sm:px-6 space-y-4">
         {currentPlayer && (
           <div className="text-center p-3 bg-muted/50 rounded">
             <p className="text-xs text-muted-foreground">Your Balance</p>
@@ -1392,40 +1392,36 @@ function PendingRequestsPanel({ roomId, connectionId }: { roomId: string; connec
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <ClockIcon weight="duotone" /> Pending Requests
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {!requests || requests.length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-4">No pending requests</p>
-        ) : (
-          <div className="space-y-3">
-            {requests.map((req) => (
-              <div key={req._id} className="p-3 border rounded space-y-2">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="font-medium">{req.playerName}</p>
-                    <p className="text-xs text-muted-foreground">{req.reason}</p>
-                  </div>
-                  <p className="font-mono font-bold text-lg">${req.amount}</p>
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 text-sm font-semibold">
+        <ClockIcon weight="duotone" /> Pending Requests
+      </div>
+      {!requests || requests.length === 0 ? (
+        <p className="text-xs text-muted-foreground text-center py-4">No pending requests</p>
+      ) : (
+        <div className="space-y-2 px-0.5">
+          {requests.map((req) => (
+            <div key={req._id} className="p-3 border space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate">{req.playerName}</p>
+                  {req.reason && <p className="text-xs text-muted-foreground truncate">{req.reason}</p>}
                 </div>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" className="flex-1" onClick={() => handleReject(req._id)} disabled={loading === req._id}>
-                    <MinusCircleIcon weight="bold" /> Reject
-                  </Button>
-                  <Button size="sm" className="flex-1" onClick={() => handleApprove(req._id)} disabled={loading === req._id}>
-                    <PlusCircleIcon weight="bold" /> Approve
-                  </Button>
-                </div>
+                <p className="font-mono font-bold text-base whitespace-nowrap shrink-0">${req.amount}</p>
               </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => handleReject(req._id)} disabled={loading === req._id}>
+                  <MinusCircleIcon weight="bold" /> Reject
+                </Button>
+                <Button className="flex-1" onClick={() => handleApprove(req._id)} disabled={loading === req._id}>
+                  <PlusCircleIcon weight="bold" /> Approve
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1471,14 +1467,14 @@ function ManualAdjustPanel({ roomId, connectionId }: { roomId: string; connectio
   };
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="py-4 sm:py-6">
+      <CardHeader className="px-4 sm:px-6 pb-3">
         <CardTitle className="flex items-center gap-2 text-sm">
           <PlusCircleIcon weight="duotone" /> Manual Balance Adjust
         </CardTitle>
         <CardDescription>Add or remove money from a player</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="px-4 sm:px-6 space-y-4">
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">Player</p>
           <Select
@@ -1558,47 +1554,47 @@ function AdminBankPanel({ roomId, connectionId }: { roomId: string; connectionId
   };
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="py-4 sm:py-6">
+      <CardHeader className="px-4 sm:px-6 pb-3">
         <CardTitle className="flex items-center gap-2 text-sm">
           <VaultIcon weight="duotone" /> Bank Withdrawal Requests
         </CardTitle>
         <CardDescription>Pending requests from players</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="px-4 sm:px-6">
         {bankRequests.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-4">No pending requests</p>
         ) : (
-          bankRequests.map((req) => (
-            <div key={req._id} className="border rounded-lg p-3 space-y-2">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="font-medium text-sm">{req.playerName}</p>
-                  <p className="text-2xl font-mono font-bold">${req.amount.toLocaleString()}</p>
-                  {req.reason && <p className="text-xs text-muted-foreground">{req.reason}</p>}
+          <div className="space-y-2">
+            {bankRequests.map((req) => (
+              <div key={req._id} className="p-3 border rounded-lg space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{req.playerName}</p>
+                    {req.reason && <p className="text-xs text-muted-foreground truncate">{req.reason}</p>}
+                  </div>
+                  <p className="font-mono font-bold text-base whitespace-nowrap shrink-0">${req.amount.toLocaleString()}</p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => handleReject(req._id)}
+                    disabled={processing === req._id}
+                  >
+                    <MinusCircleIcon weight="bold" /> Reject
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    onClick={() => handleApprove(req._id)}
+                    disabled={processing === req._id}
+                  >
+                    <PlusCircleIcon weight="bold" /> Approve
+                  </Button>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => handleApprove(req._id)}
-                  disabled={processing === req._id}
-                >
-                  {processing === req._id ? "..." : "Approve"}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  className="flex-1"
-                  onClick={() => handleReject(req._id)}
-                  disabled={processing === req._id}
-                >
-                  {processing === req._id ? "..." : "Reject"}
-                </Button>
-              </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </CardContent>
     </Card>
@@ -1700,13 +1696,13 @@ function TransactionLogPanel({ roomId }: { roomId: string }) {
   };
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="py-4 sm:py-6">
+      <CardHeader className="px-4 sm:px-6 pb-3">
         <CardTitle className="flex items-center gap-2 text-sm">
           <ClockIcon weight="duotone" /> Transaction Log
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-4 sm:px-6">
         {!transactions || transactions.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-4">No transactions yet</p>
         ) : (
