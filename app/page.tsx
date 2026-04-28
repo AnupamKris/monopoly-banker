@@ -18,7 +18,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { UsersIcon, HouseLineIcon, UserCircleIcon, ArrowRightIcon, CopyIcon, CheckIcon, SignOutIcon, WalletIcon, ArrowsLeftRightIcon, ShieldIcon, ClockIcon, UserPlusIcon, MinusCircleIcon, PlusCircleIcon, BackspaceIcon, PaperPlaneTiltIcon, UserMinusIcon, VaultIcon } from "@phosphor-icons/react";
+import { UsersIcon, HouseLineIcon, UserCircleIcon, ArrowRightIcon, CopyIcon, CheckIcon, SignOutIcon, WalletIcon, ArrowsLeftRightIcon, ShieldIcon, ClockIcon, UserPlusIcon, MinusCircleIcon, PlusCircleIcon, BackspaceIcon, PaperPlaneTiltIcon, UserMinusIcon, VaultIcon, QrCodeIcon } from "@phosphor-icons/react";
+import { QRCodeSVG } from "qrcode.react";
 
 const CURRENT_ROOM_KEY = "monopolyCurrentRoom";
 
@@ -77,6 +78,13 @@ export default function MonopolyBankerApp() {
   const [showGamePage, setShowGamePage] = useState(false);
   const [pendingSession, setPendingSession] = useState<StoredSession | null>(null);
   const [bootstrapped, setBootstrapped] = useState(false);
+  const [autoJoinCode, setAutoJoinCode] = useState<string | null>(null);
+  const [autoJoinNameInput, setAutoJoinNameInput] = useState("");
+  const [autoJoinError, setAutoJoinError] = useState("");
+  const [autoJoinLoading, setAutoJoinLoading] = useState(false);
+  const [showAutoJoinNameDialog, setShowAutoJoinNameDialog] = useState(false);
+
+  const joinRoomMutation = useMutation(api.monopolyBanker.joinRoom);
 
   useEffect(() => {
     let connId = localStorage.getItem("monopolyConnectionId");
@@ -92,13 +100,30 @@ export default function MonopolyBankerApp() {
     const history = JSON.parse(localStorage.getItem("monopolyRoomHistory") || "[]");
     setRoomHistory(history);
 
+    let urlJoinCode: string | null = null;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const raw = params.get("join");
+      if (raw && /^[A-Za-z0-9]{6}$/.test(raw)) {
+        urlJoinCode = raw.toUpperCase();
+        const url = new URL(window.location.href);
+        url.searchParams.delete("join");
+        window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+      }
+    } catch {}
+    if (urlJoinCode) setAutoJoinCode(urlJoinCode);
+
     try {
       const raw = localStorage.getItem(CURRENT_ROOM_KEY);
       if (raw) {
         const saved = JSON.parse(raw) as StoredSession;
         if (saved?.roomId && saved?.playerId) {
-          setPendingSession(saved);
-          return;
+          if (urlJoinCode && saved.code !== urlJoinCode) {
+            localStorage.removeItem(CURRENT_ROOM_KEY);
+          } else {
+            setPendingSession(saved);
+            return;
+          }
         }
       }
     } catch {}
@@ -134,6 +159,47 @@ export default function MonopolyBankerApp() {
     setPlayerName(name);
     localStorage.setItem("monopolyPlayerName", name);
   };
+
+  const performAutoJoin = async (code: string, name: string) => {
+    setAutoJoinError("");
+    setAutoJoinLoading(true);
+    try {
+      const result = await joinRoomMutation({ code, playerName: name, connectionId, adminPassword: undefined });
+      if (result.success && result.roomId) {
+        enterRoom(result.roomId, result.playerId || "", result.isAdmin || false, code, name);
+        setAutoJoinCode(null);
+        setShowAutoJoinNameDialog(false);
+      } else {
+        setAutoJoinError(result.error || "Failed to join room");
+        if (!playerName) setShowAutoJoinNameDialog(true);
+      }
+    } catch (e: any) {
+      setAutoJoinError(e.message || "Failed to join room");
+      if (!playerName) setShowAutoJoinNameDialog(true);
+    } finally {
+      setAutoJoinLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!bootstrapped || !autoJoinCode || !connectionId) return;
+    if (currentRoom && currentRoom.code === autoJoinCode) {
+      setAutoJoinCode(null);
+      return;
+    }
+    if (currentRoom && currentRoom.code !== autoJoinCode) {
+      localStorage.removeItem(CURRENT_ROOM_KEY);
+      setCurrentRoom(null);
+      setShowGamePage(false);
+    }
+    if (playerName.trim()) {
+      performAutoJoin(autoJoinCode, playerName.trim());
+    } else {
+      setAutoJoinNameInput("");
+      setShowAutoJoinNameDialog(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bootstrapped, autoJoinCode, connectionId]);
 
   const addToRoomHistory = (roomId: string, code: string, name: string) => {
     const history = roomHistory.filter(r => r.roomId !== roomId);
@@ -229,6 +295,44 @@ export default function MonopolyBankerApp() {
             </DialogContent>
           </Dialog>
         </div>
+
+        <Dialog open={showAutoJoinNameDialog} onOpenChange={(open) => { if (!open) { setShowAutoJoinNameDialog(false); setAutoJoinCode(null); setAutoJoinError(""); } }}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Join Room {autoJoinCode}</DialogTitle>
+              <DialogDescription>Enter your name to join this room.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 pt-2">
+              <Input
+                placeholder="Your name"
+                value={autoJoinNameInput}
+                onChange={(e) => setAutoJoinNameInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && autoJoinNameInput.trim() && autoJoinCode) {
+                    saveName(autoJoinNameInput.trim());
+                    performAutoJoin(autoJoinCode, autoJoinNameInput.trim());
+                  }
+                }}
+                autoFocus
+              />
+              {autoJoinError && <p className="text-xs text-destructive">{autoJoinError}</p>}
+            </div>
+            <DialogFooter>
+              <Button
+                onClick={() => {
+                  if (autoJoinNameInput.trim() && autoJoinCode) {
+                    saveName(autoJoinNameInput.trim());
+                    performAutoJoin(autoJoinCode, autoJoinNameInput.trim());
+                  }
+                }}
+                disabled={autoJoinLoading || !autoJoinNameInput.trim()}
+                className="w-full"
+              >
+                {autoJoinLoading ? "Joining..." : "Join Room"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {roomHistory.length > 0 && (
           <div className="pt-8 space-y-4">
@@ -483,6 +587,11 @@ function JoinRoomTab({ playerName, connectionId, onRoomJoined, roomHistory }: { 
 function GamePage({ roomId, code, playerId, isAdmin, connectionId, onLeave }: { roomId: string; code: string; playerId: string; isAdmin: boolean; connectionId: string; onLeave: (opts?: { kicked?: boolean }) => void }) {
   const [activeTab, setActiveTab] = useState<string>("balance");
   const [showHistory, setShowHistory] = useState(false);
+  const [showQr, setShowQr] = useState(false);
+  const joinUrl = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    return `${window.location.origin}${window.location.pathname}?join=${code}`;
+  }, [code]);
   const players = useQuery(api.monopolyBanker.getPlayers, { roomId }) as Player[] | undefined;
   const leaveRoomMutation = useMutation(api.monopolyBanker.leaveRoom);
   const leftRef = useRef(false);
@@ -538,7 +647,15 @@ function GamePage({ roomId, code, playerId, isAdmin, connectionId, onLeave }: { 
             <ClockIcon weight="duotone" className="text-primary" />
             <span className="sr-only">Transaction History</span>
           </Button>
-          <span className="text-sm font-mono bg-muted px-3 py-1.5 rounded-md">{code}</span>
+          <button
+            type="button"
+            onClick={() => setShowQr(true)}
+            className="text-sm font-mono bg-muted px-3 py-1.5 rounded-md hover:bg-muted/70 transition-colors flex items-center gap-1.5"
+            title="Show QR code"
+          >
+            <QrCodeIcon weight="duotone" className="size-3.5" />
+            {code}
+          </button>
           <Button variant="ghost" size="icon" onClick={() => { navigator.clipboard.writeText(code); toast.success("Room code copied!"); }}>
             <CopyIcon weight="bold" />
             <span className="sr-only">Copy Room Code</span>
@@ -570,6 +687,30 @@ function GamePage({ roomId, code, playerId, isAdmin, connectionId, onLeave }: { 
           )}
         </Tabs>
       </div>
+
+      <Dialog open={showQr} onOpenChange={setShowQr}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Room {code}</DialogTitle>
+            <DialogDescription>Scan to join this room directly.</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-4 py-2">
+            {joinUrl && (
+              <div className="bg-white p-4 rounded-lg">
+                <QRCodeSVG value={joinUrl} size={220} level="M" />
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground break-all text-center">{joinUrl}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { navigator.clipboard.writeText(joinUrl); toast.success("Join link copied!"); }}
+            >
+              <CopyIcon weight="bold" /> Copy link
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Drawer open={showHistory} onOpenChange={setShowHistory}>
         <DrawerContent className="max-h-[85vh]">

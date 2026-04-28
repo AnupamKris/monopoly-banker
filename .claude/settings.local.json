@@ -4,7 +4,8 @@
       "Bash(pnpm build *)",
       "Bash(npx tsc *)",
       "Bash(pnpm install *)",
-      "Bash(pnpm typecheck *)"
+      "Bash(pnpm typecheck *)",
+      "Bash(pnpm add *)"
     ]
   }
 }
