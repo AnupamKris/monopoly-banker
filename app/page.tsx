@@ -1401,7 +1401,7 @@ function PendingRequestsPanel({ roomId, connectionId }: { roomId: string; connec
       ) : (
         <div className="space-y-2 px-0.5">
           {requests.map((req) => (
-            <div key={req._id} className="p-3 border space-y-3">
+            <div key={req._id} className="p-3 border space-y-3 bg-muted">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm truncate">{req.playerName}</p>
@@ -1410,7 +1410,7 @@ function PendingRequestsPanel({ roomId, connectionId }: { roomId: string; connec
                 <p className="font-mono font-bold text-base whitespace-nowrap shrink-0">${req.amount}</p>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" className="flex-1 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => handleReject(req._id)} disabled={loading === req._id}>
+                <Button variant="outline" className="flex-1 text-destructive hover:bg-destructive/10 hover:text-destructive bg-background" onClick={() => handleReject(req._id)} disabled={loading === req._id}>
                   <MinusCircleIcon weight="bold" /> Reject
                 </Button>
                 <Button className="flex-1" onClick={() => handleApprove(req._id)} disabled={loading === req._id}>
