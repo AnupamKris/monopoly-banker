@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SlideAction } from "@/components/ui/slide-action";
 import { cn } from "@/lib/utils";
 import { UsersIcon, HouseLineIcon, UserCircleIcon, ArrowRightIcon, CopyIcon, CheckIcon, SignOutIcon, WalletIcon, ArrowsLeftRightIcon, ShieldIcon, ClockIcon, UserPlusIcon, MinusCircleIcon, PlusCircleIcon, BackspaceIcon, PaperPlaneTiltIcon, UserMinusIcon, VaultIcon, QrCodeIcon } from "@phosphor-icons/react";
 import { QRCodeSVG } from "qrcode.react";
@@ -1026,13 +1027,16 @@ function BalanceTransferTab({ roomId, playerId, connectionId, isAdmin }: { roomI
           </div>
 
           <DrawerFooter>
-            <Button
-              onClick={handleTransfer}
+            <SlideAction
+              onAction={handleTransfer}
               disabled={loading || !amountNum || insufficient}
+              isLoading={loading}
+              isSuccess={success}
+              label="Slide to send money"
+              loadingLabel="Sending..."
+              successLabel="Sent!"
               className="w-full"
-            >
-              {loading ? "Sending..." : "Send Money"}
-            </Button>
+            />
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
@@ -1111,13 +1115,16 @@ function BalanceTransferTab({ roomId, playerId, connectionId, isAdmin }: { roomI
           </div>
 
           <DrawerFooter>
-            <Button
-              onClick={handleBankSubmit}
+            <SlideAction
+              onAction={handleBankSubmit}
               disabled={bankLoading || !bankAmountNum || bankInsufficient}
+              isLoading={bankLoading}
+              isSuccess={bankSuccess}
+              label={bankAction === "deposit" ? "Slide to deposit" : "Slide to withdraw"}
+              loadingLabel="Processing..."
+              successLabel="Complete!"
               className="w-full"
-            >
-              {bankLoading ? "Processing..." : bankAction === "deposit" ? "Deposit" : "Withdraw"}
-            </Button>
+            />
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
@@ -1320,14 +1327,16 @@ function TransferTab({ roomId, playerId, connectionId }: { roomId: string; playe
           </div>
 
           <DrawerFooter>
-            <Button
-              onClick={handleTransfer}
+            <SlideAction
+              onAction={handleTransfer}
               disabled={loading || !amountNum || insufficient}
+              isLoading={loading}
+              isSuccess={success}
+              label={`Slide to send $${amountNum.toLocaleString()}`}
+              loadingLabel="Sending..."
+              successLabel="Sent!"
               className="w-full"
-              size="lg"
-            >
-              {loading ? "Sending..." : `Send $${amountNum.toLocaleString()}`}
-            </Button>
+            />
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
