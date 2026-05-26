@@ -640,11 +640,11 @@ function GamePage({ roomId, code, playerId, isAdmin, connectionId, onLeave }: { 
             <span className="sr-only">Leave Room</span>
           </Button>
           <div>
-            <h1 className="font-heading font-medium">Monopoly</h1>
+            <h1 className="font-heading font-medium">Monopoly Banker</h1>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => setShowHistory(true)}>
+          <Button variant="ghost" size="icon" onClick={() => setShowHistory(true)} className="md:hidden">
             <ClockIcon weight="duotone" className="text-primary" />
             <span className="sr-only">Transaction History</span>
           </Button>
@@ -664,29 +664,126 @@ function GamePage({ roomId, code, playerId, isAdmin, connectionId, onLeave }: { 
         </div>
       </header>
 
-      <div className="flex-1 p-4">
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="w-full">
-            <TabsTrigger value="balance" className="flex-1 gap-2">
-              <WalletIcon weight="duotone" /> Balance
-            </TabsTrigger>
-            {isAdmin && (
-              <TabsTrigger value="admin" className="flex-1 gap-2">
-                <ShieldIcon weight="duotone" /> Admin
-              </TabsTrigger>
+      <div className="flex-1 p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full">
+        {/* Desktop Split Dashboard View */}
+        <div className="hidden md:grid md:grid-cols-12 md:gap-6 items-start">
+          {/* Left Column: Wallet & Transfer Panels */}
+          <div className="md:col-span-5 lg:col-span-4 space-y-6">
+            <Card className="shadow-sm border border-border/60">
+              <CardHeader className="pb-3 border-b bg-muted/20">
+                <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                  <WalletIcon weight="duotone" className="text-primary size-4" /> Personal Wallet
+                </CardTitle>
+                <CardDescription>Manage your cash and direct transactions</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <BalanceTransferTab roomId={roomId} playerId={playerId} connectionId={connectionId} isAdmin={isAdmin} />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Right Column: Admin Tools / Logs */}
+          <div className="md:col-span-7 lg:col-span-8 space-y-6">
+            {isAdmin ? (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between border-b pb-3">
+                  <h2 className="text-lg font-heading font-semibold flex items-center gap-2">
+                    <ShieldIcon weight="duotone" className="text-primary size-5" /> Banker Control Desk
+                  </h2>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Player Request approvals */}
+                  <Card className="shadow-sm border border-amber-500/10">
+                    <CardHeader className="pb-3 border-b bg-amber-500/[0.02]">
+                      <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                        <ClockIcon weight="duotone" className="size-4" /> Player Transfers
+                      </CardTitle>
+                      <CardDescription>Pending requests from other players</CardDescription>
+                    </CardHeader>
+                    <CardContent className="max-h-[300px] overflow-y-auto pt-4">
+                      <PendingRequestsPanel roomId={roomId} connectionId={connectionId} />
+                    </CardContent>
+                  </Card>
+
+                  {/* Bank withdrawal approvals */}
+                  <Card className="shadow-sm border border-violet-500/10">
+                    <CardHeader className="pb-3 border-b bg-violet-500/[0.02]">
+                      <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400">
+                        <VaultIcon weight="duotone" className="size-4" /> Bank Operations
+                      </CardTitle>
+                      <CardDescription>Pending deposits and withdrawals</CardDescription>
+                    </CardHeader>
+                    <CardContent className="max-h-[300px] overflow-y-auto pt-4">
+                      <AdminBankPanel roomId={roomId} connectionId={connectionId} />
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Manual Balance Changer */}
+                  <ManualAdjustPanel roomId={roomId} connectionId={connectionId} />
+
+                  {/* Desktop Log Panel */}
+                  <Card className="shadow-sm border border-border/60">
+                    <CardHeader className="pb-3 border-b bg-muted/20">
+                      <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                        <ClockIcon weight="duotone" className="size-4" /> Live Room Log
+                      </CardTitle>
+                      <CardDescription>Real-time audit trail of games</CardDescription>
+                    </CardHeader>
+                    <CardContent className="max-h-[400px] overflow-y-auto pt-4">
+                      <TransactionLogPanel roomId={roomId} />
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between border-b pb-3">
+                  <h2 className="text-lg font-heading font-semibold flex items-center gap-2">
+                    <ClockIcon weight="duotone" className="text-primary size-5" /> Live Room Transactions
+                  </h2>
+                </div>
+                <Card className="shadow-sm border border-border/60">
+                  <CardHeader className="pb-3 border-b bg-muted/20">
+                    <CardTitle className="text-sm font-medium">Global Audit Ledger</CardTitle>
+                    <CardDescription>Live log of money movements and players</CardDescription>
+                  </CardHeader>
+                  <CardContent className="max-h-[600px] overflow-y-auto pt-4">
+                    <TransactionLogPanel roomId={roomId} />
+                  </CardContent>
+                </Card>
+              </div>
             )}
-          </TabsList>
+          </div>
+        </div>
 
-          <TabsContent value="balance" className="pt-4">
-            <BalanceTransferTab roomId={roomId} playerId={playerId} connectionId={connectionId} isAdmin={isAdmin} />
-          </TabsContent>
+        {/* Mobile Tabbed View */}
+        <div className="block md:hidden">
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="w-full">
+              <TabsTrigger value="balance" className="flex-1 gap-2">
+                <WalletIcon weight="duotone" /> Balance
+              </TabsTrigger>
+              {isAdmin && (
+                <TabsTrigger value="admin" className="flex-1 gap-2">
+                  <ShieldIcon weight="duotone" /> Admin
+                </TabsTrigger>
+              )}
+            </TabsList>
 
-          {isAdmin && (
-            <TabsContent value="admin" className="pt-4">
-              <AdminTab roomId={roomId} connectionId={connectionId} />
+            <TabsContent value="balance" className="pt-4">
+              <BalanceTransferTab roomId={roomId} playerId={playerId} connectionId={connectionId} isAdmin={isAdmin} />
             </TabsContent>
-          )}
-        </Tabs>
+
+            {isAdmin && (
+              <TabsContent value="admin" className="pt-4">
+                <AdminTab roomId={roomId} connectionId={connectionId} />
+              </TabsContent>
+            )}
+          </Tabs>
+        </div>
       </div>
 
       <Dialog open={showQr} onOpenChange={setShowQr}>
