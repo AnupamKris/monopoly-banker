@@ -8,11 +8,11 @@ import { ConvexClientProvider } from "@/components/convex-provider";
 import { SerwistProvider } from "@/components/serwist-provider";
 import { Toaster } from "@/components/ui/sonner";
 
-const APP_NAME = "new-mono";
-const APP_DEFAULT_TITLE = "new-mono";
-const APP_TITLE_TEMPLATE = "%s · new-mono";
+const APP_NAME = "Monopoly Banker";
+const APP_DEFAULT_TITLE = "Monopoly Banker";
+const APP_TITLE_TEMPLATE = "%s · Monopoly Banker";
 const APP_DESCRIPTION =
-  "Progressive web app powered by Next.js and Convex.";
+  "A real-time digital banker helper for Monopoly games, powered by Next.js and Convex.";
 
 export const metadata: Metadata = {
   applicationName: APP_NAME,

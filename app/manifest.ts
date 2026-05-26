@@ -4,9 +4,9 @@ const themeColor = "#252525";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "new-mono",
-    short_name: "new-mono",
-    description: "Progressive web app powered by Next.js and Convex.",
+    name: "Monopoly Banker",
+    short_name: "MonoBanker",
+    description: "A real-time digital banker helper for Monopoly games.",
     start_url: "/",
     scope: "/",
     display: "standalone",
