@@ -61,6 +61,7 @@ interface MoneyRequest {
   _id: string;
   playerId: string;
   playerName: string;
+  type: string;
   amount: number;
   reason: string;
   status: string;
@@ -666,97 +667,19 @@ function GamePage({ roomId, code, playerId, isAdmin, connectionId, onLeave }: { 
 
       <div className="flex-1 p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full">
         {/* Desktop Split Dashboard View */}
-        <div className="hidden md:grid md:grid-cols-12 md:gap-6 items-start">
-          {/* Left Column: Wallet & Transfer Panels */}
-          <div className="md:col-span-5 lg:col-span-4 space-y-6">
-            <Card className="shadow-sm border border-border/60">
-              <CardHeader className="pb-3 border-b bg-muted/20">
-                <CardTitle className="flex items-center gap-2 text-sm font-medium">
-                  <WalletIcon weight="duotone" className="text-primary size-4" /> Personal Wallet
-                </CardTitle>
-                <CardDescription>Manage your cash and direct transactions</CardDescription>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <BalanceTransferTab roomId={roomId} playerId={playerId} connectionId={connectionId} isAdmin={isAdmin} />
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Right Column: Admin Tools / Logs */}
-          <div className="md:col-span-7 lg:col-span-8 space-y-6">
-            {isAdmin ? (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between border-b pb-3">
-                  <h2 className="text-lg font-heading font-semibold flex items-center gap-2">
-                    <ShieldIcon weight="duotone" className="text-primary size-5" /> Banker Control Desk
-                  </h2>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Player Request approvals */}
-                  <Card className="shadow-sm border border-amber-500/10">
-                    <CardHeader className="pb-3 border-b bg-amber-500/[0.02]">
-                      <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                        <ClockIcon weight="duotone" className="size-4" /> Player Transfers
-                      </CardTitle>
-                      <CardDescription>Pending requests from other players</CardDescription>
-                    </CardHeader>
-                    <CardContent className="max-h-[300px] overflow-y-auto pt-4">
-                      <PendingRequestsPanel roomId={roomId} connectionId={connectionId} />
-                    </CardContent>
-                  </Card>
-
-                  {/* Bank withdrawal approvals */}
-                  <Card className="shadow-sm border border-violet-500/10">
-                    <CardHeader className="pb-3 border-b bg-violet-500/[0.02]">
-                      <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-violet-600 dark:text-violet-400">
-                        <VaultIcon weight="duotone" className="size-4" /> Bank Operations
-                      </CardTitle>
-                      <CardDescription>Pending deposits and withdrawals</CardDescription>
-                    </CardHeader>
-                    <CardContent className="max-h-[300px] overflow-y-auto pt-4">
-                      <AdminBankPanel roomId={roomId} connectionId={connectionId} />
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Manual Balance Changer */}
-                  <ManualAdjustPanel roomId={roomId} connectionId={connectionId} />
-
-                  {/* Desktop Log Panel */}
-                  <Card className="shadow-sm border border-border/60">
-                    <CardHeader className="pb-3 border-b bg-muted/20">
-                      <CardTitle className="flex items-center gap-2 text-sm font-medium">
-                        <ClockIcon weight="duotone" className="size-4" /> Live Room Log
-                      </CardTitle>
-                      <CardDescription>Real-time audit trail of games</CardDescription>
-                    </CardHeader>
-                    <CardContent className="max-h-[400px] overflow-y-auto pt-4">
-                      <TransactionLogPanel roomId={roomId} />
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between border-b pb-3">
-                  <h2 className="text-lg font-heading font-semibold flex items-center gap-2">
-                    <ClockIcon weight="duotone" className="text-primary size-5" /> Live Room Transactions
-                  </h2>
-                </div>
-                <Card className="shadow-sm border border-border/60">
-                  <CardHeader className="pb-3 border-b bg-muted/20">
-                    <CardTitle className="text-sm font-medium">Global Audit Ledger</CardTitle>
-                    <CardDescription>Live log of money movements and players</CardDescription>
-                  </CardHeader>
-                  <CardContent className="max-h-[600px] overflow-y-auto pt-4">
-                    <TransactionLogPanel roomId={roomId} />
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-          </div>
+        <div className="hidden md:block">
+          <DesktopDashboard
+            roomId={roomId}
+            code={code}
+            playerId={playerId}
+            isAdmin={isAdmin}
+            connectionId={connectionId}
+            onLeave={onLeave}
+            handleSignOut={handleSignOut}
+            joinUrl={joinUrl}
+            showQr={showQr}
+            setShowQr={setShowQr}
+          />
         </div>
 
         {/* Mobile Tabbed View */}
@@ -822,6 +745,783 @@ function GamePage({ roomId, code, playerId, isAdmin, connectionId, onLeave }: { 
           </div>
         </DrawerContent>
       </Drawer>
+    </div>
+  );
+}
+
+function DesktopDashboard({
+  roomId,
+  code,
+  playerId,
+  isAdmin,
+  connectionId,
+  onLeave,
+  handleSignOut,
+  joinUrl,
+  showQr,
+  setShowQr,
+}: {
+  roomId: string;
+  code: string;
+  playerId: string;
+  isAdmin: boolean;
+  connectionId: string;
+  onLeave: (opts?: { kicked?: boolean }) => void;
+  handleSignOut: () => Promise<void>;
+  joinUrl: string;
+  showQr: boolean;
+  setShowQr: (open: boolean) => void;
+}) {
+  const players = useQuery(api.monopolyBanker.getPlayers, { roomId }) as Player[] | undefined;
+  const pendingRequests = useQuery(api.monopolyBanker.getPendingRequests, { roomId }) as MoneyRequest[] | undefined;
+
+  const currentPlayer = players?.find((p) => p._id === playerId);
+
+  // Mutations
+  const transferMoney = useMutation(api.monopolyBanker.transfer);
+  const sendToBankMutation = useMutation(api.monopolyBanker.sendToBank);
+  const requestFromBankMutation = useMutation(api.monopolyBanker.requestFromBank);
+  const approveRequest = useMutation(api.monopolyBanker.approveRequest);
+  const rejectRequest = useMutation(api.monopolyBanker.rejectRequest);
+  const manualBalanceChange = useMutation(api.monopolyBanker.manualBalanceChange);
+  const kickPlayer = useMutation(api.monopolyBanker.kickPlayer);
+
+  // States
+  const [walletTab, setWalletTab] = useState<"transfer" | "deposit" | "withdraw">("transfer");
+  
+  // Transfer state
+  const [transferRecipient, setTransferRecipient] = useState<string>("");
+  const [transferAmount, setTransferAmount] = useState<string>("");
+  const [transferReason, setTransferReason] = useState<string>("");
+  const [transferLoading, setTransferLoading] = useState(false);
+  const [transferError, setTransferError] = useState("");
+
+  // Deposit / Withdraw state
+  const [bankAmount, setBankAmount] = useState<string>("");
+  const [bankReason, setBankReason] = useState<string>("");
+  const [bankLoading, setBankLoading] = useState(false);
+  const [bankError, setBankError] = useState("");
+
+  // Admin Adjust state
+  const [adjustPlayerId, setAdjustPlayerId] = useState<string>("");
+  const [adjustAmount, setAdjustAmount] = useState<string>("");
+  const [adjustReason, setAdjustReason] = useState<string>("");
+  const [adjustLoading, setAdjustLoading] = useState(false);
+  const [adjustSuccess, setAdjustSuccess] = useState(false);
+  const [adjustError, setAdjustError] = useState("");
+
+  const [kickingPlayerId, setKickingPlayerId] = useState<string | null>(null);
+  const [processingRequestId, setProcessingRequestId] = useState<string | null>(null);
+
+  const addTransferAmount = (val: number) => {
+    setTransferAmount((prev) => {
+      const current = parseInt(prev) || 0;
+      return String(current + val);
+    });
+  };
+
+  const addBankAmount = (val: number) => {
+    setBankAmount((prev) => {
+      const current = parseInt(prev) || 0;
+      return String(current + val);
+    });
+  };
+
+  const handleTransferSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!transferRecipient) { setTransferError("Please select a recipient"); return; }
+    const amt = parseInt(transferAmount);
+    if (!amt || amt <= 0) { setTransferError("Please enter a valid amount"); return; }
+    if (currentPlayer && amt > currentPlayer.balance) { setTransferError("Insufficient funds"); return; }
+
+    setTransferError("");
+    setTransferLoading(true);
+
+    try {
+      await transferMoney({
+        senderId: playerId,
+        recipientId: transferRecipient,
+        amount: amt,
+        reason: transferReason,
+        connectionId,
+      });
+      setTransferAmount("");
+      setTransferReason("");
+      toast.success("Transfer sent successfully!");
+    } catch (err: any) {
+      setTransferError(err.message || "Failed to execute transfer");
+    } finally {
+      setTransferLoading(false);
+    }
+  };
+
+  const handleBankSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = parseInt(bankAmount);
+    if (!amt || amt <= 0) { setBankError("Please enter a valid amount"); return; }
+    if (walletTab === "deposit" && currentPlayer && amt > currentPlayer.balance) {
+      setBankError("Insufficient funds");
+      return;
+    }
+
+    setBankError("");
+    setBankLoading(true);
+
+    try {
+      if (walletTab === "deposit") {
+        await sendToBankMutation({
+          playerId,
+          amount: amt,
+          reason: bankReason,
+          connectionId,
+        });
+        toast.success("Deposit request sent to Bank!");
+      } else {
+        await requestFromBankMutation({
+          playerId,
+          amount: amt,
+          reason: bankReason,
+          connectionId,
+        });
+        toast.success("Withdrawal request sent to Bank!");
+      }
+      setBankAmount("");
+      setBankReason("");
+    } catch (err: any) {
+      setBankError(err.message || "Failed to submit request");
+    } finally {
+      setBankLoading(false);
+    }
+  };
+
+  const handleAdjustSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adjustPlayerId) { setAdjustError("Please select a player"); return; }
+    const amt = parseInt(adjustAmount);
+    if (isNaN(amt) || amt === 0) { setAdjustError("Please enter a non-zero amount"); return; }
+
+    setAdjustError("");
+    setAdjustLoading(true);
+    setAdjustSuccess(false);
+
+    try {
+      await manualBalanceChange({
+        playerId: adjustPlayerId,
+        amount: amt,
+        description: adjustReason,
+        connectionId,
+      });
+      setAdjustSuccess(true);
+      setAdjustAmount("");
+      setAdjustReason("");
+      toast.success("Balance adjusted successfully!");
+    } catch (err: any) {
+      setAdjustError(err.message || "Failed to adjust balance");
+    } finally {
+      setAdjustLoading(false);
+    }
+  };
+
+  const handleApproveRequest = async (requestId: string) => {
+    setProcessingRequestId(requestId);
+    try {
+      await approveRequest({ requestId, connectionId });
+      toast.success("Request approved!");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to approve");
+    } finally {
+      setProcessingRequestId(null);
+    }
+  };
+
+  const handleRejectRequest = async (requestId: string) => {
+    setProcessingRequestId(requestId);
+    try {
+      await rejectRequest({ requestId, connectionId });
+      toast.success("Request rejected!");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to reject");
+    } finally {
+      setProcessingRequestId(null);
+    }
+  };
+
+  const handleKickPlayer = async (player: Player) => {
+    if (!confirm(`Kick ${player.name} from the room?`)) return;
+    setKickingPlayerId(player._id);
+    try {
+      await kickPlayer({ playerId: player._id, connectionId });
+      toast.success(`${player.name} kicked from the room.`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to kick player");
+    } finally {
+      setKickingPlayerId(null);
+    }
+  };
+
+  const totalCirculatingMoney = players?.reduce((sum, p) => sum + p.balance, 0) ?? 0;
+  const activeCount = players?.length ?? 0;
+
+  // Filter requests
+  const bankRequests = pendingRequests?.filter((r) => r.type === "bank_request") ?? [];
+  const transferRequests = pendingRequests?.filter((r) => r.type !== "bank_request") ?? [];
+
+  return (
+    <div className="space-y-6">
+      {/* Stat Bar */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-card border border-border/60 rounded-xl p-6 flex items-center gap-4 shadow-sm">
+          <div className="p-3 bg-primary/10 text-primary rounded-xl">
+            <WalletIcon weight="duotone" className="size-8" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Circulating Cash</p>
+            <p className="text-3xl font-bold font-mono text-foreground">${totalCirculatingMoney.toLocaleString()}</p>
+          </div>
+        </div>
+
+        <div className="bg-card border border-border/60 rounded-xl p-6 flex items-center gap-4 shadow-sm">
+          <div className="p-3 bg-blue-500/10 text-blue-500 rounded-xl">
+            <UsersIcon weight="duotone" className="size-8" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Active Board Players</p>
+            <p className="text-3xl font-bold font-mono text-foreground">{activeCount} Members</p>
+          </div>
+        </div>
+
+        <div className="bg-card border border-border/60 rounded-xl p-6 flex items-center gap-4 shadow-sm">
+          <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl">
+            <ClockIcon weight="duotone" className="size-8" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Queue Approvals</p>
+            <p className="text-3xl font-bold font-mono text-foreground">{pendingRequests?.length ?? 0} Requests</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Grid */}
+      <div className="grid grid-cols-12 gap-6 items-start">
+        
+        {/* Left Column: Wallet Card & Room Code */}
+        <div className="col-span-12 lg:col-span-4 space-y-6">
+          
+          {/* Personal Wallet */}
+          <Card className="shadow-md border border-border/60 overflow-hidden">
+            <div className="p-6 bg-muted/20 border-b flex justify-between items-center">
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Your Wallet Balance</p>
+                <h2 className="text-4xl font-bold font-mono text-foreground mt-1">
+                  ${currentPlayer?.balance.toLocaleString() ?? "0"}
+                </h2>
+              </div>
+              <WalletIcon weight="duotone" className="size-10 text-primary opacity-80" />
+            </div>
+
+            <div className="p-4 border-b bg-muted/10 flex gap-2">
+              <button
+                type="button"
+                className={cn(
+                  "flex-1 py-2 text-xs font-semibold rounded-lg transition-all",
+                  walletTab === "transfer" ? "bg-background border shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                )}
+                onClick={() => setWalletTab("transfer")}
+              >
+                Transfer
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "flex-1 py-2 text-xs font-semibold rounded-lg transition-all",
+                  walletTab === "deposit" ? "bg-background border shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                )}
+                onClick={() => setWalletTab("deposit")}
+              >
+                Deposit
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "flex-1 py-2 text-xs font-semibold rounded-lg transition-all",
+                  walletTab === "withdraw" ? "bg-background border shadow text-foreground" : "text-muted-foreground hover:text-foreground"
+                )}
+                onClick={() => setWalletTab("withdraw")}
+              >
+                Withdraw
+              </button>
+            </div>
+
+            <div className="p-6">
+              {walletTab === "transfer" ? (
+                <form onSubmit={handleTransferSubmit} className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground">Select Recipient Player</label>
+                    <Select
+                      value={transferRecipient}
+                      onValueChange={(v) => setTransferRecipient(v || "")}
+                    >
+                      <SelectTrigger className="w-full bg-background border-border/80">
+                        <SelectValue placeholder="Choose player..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {players?.filter(p => p._id !== playerId).map((p) => (
+                          <SelectItem key={p._id} value={p._id}>
+                            {p.name} (${p.balance.toLocaleString()})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground">Amount ($)</label>
+                    <Input
+                      type="number"
+                      placeholder="Enter amount to send..."
+                      value={transferAmount}
+                      onChange={(e) => {
+                        setTransferError("");
+                        setTransferAmount(e.target.value);
+                      }}
+                      className="font-mono bg-background text-lg py-5 border-border/80"
+                    />
+                    <div className="flex gap-2">
+                      {[10, 50, 100, 500].map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => addTransferAmount(v)}
+                          className="flex-1 text-[11px] font-mono py-1 border rounded-md hover:bg-muted transition-colors bg-background"
+                        >
+                          +{v}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setTransferAmount(String(currentPlayer?.balance ?? 0))}
+                        className="text-[11px] font-mono py-1 px-2 border rounded-md hover:bg-muted transition-colors bg-background"
+                      >
+                        MAX
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground">Reason (Optional)</label>
+                    <Input
+                      placeholder="e.g. Rent for Boardwalk"
+                      value={transferReason}
+                      onChange={(e) => setTransferReason(e.target.value)}
+                      className="bg-background border-border/80"
+                    />
+                  </div>
+
+                  {transferError && <p className="text-xs text-destructive">{transferError}</p>}
+
+                  <Button
+                    type="submit"
+                    disabled={transferLoading || !transferRecipient || !transferAmount || (parseInt(transferAmount) > (currentPlayer?.balance ?? 0))}
+                    className="w-full py-5 text-sm font-semibold"
+                  >
+                    {transferLoading ? "Processing..." : "Send Transfer"}
+                  </Button>
+                </form>
+              ) : (
+                <form onSubmit={(e) => handleBankSubmit(e)} className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground">Amount ($)</label>
+                    <Input
+                      type="number"
+                      placeholder="Enter amount..."
+                      value={bankAmount}
+                      onChange={(e) => {
+                        setBankError("");
+                        setBankAmount(e.target.value);
+                      }}
+                      className="font-mono bg-background text-lg py-5 border-border/80"
+                    />
+                    <div className="flex gap-2">
+                      {[10, 50, 100, 500].map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => addBankAmount(v)}
+                          className="flex-1 text-[11px] font-mono py-1 border rounded-md hover:bg-muted transition-colors bg-background"
+                        >
+                          +{v}
+                        </button>
+                      ))}
+                      {walletTab === "deposit" && (
+                        <button
+                          type="button"
+                          onClick={() => setBankAmount(String(currentPlayer?.balance ?? 0))}
+                          className="text-[11px] font-mono py-1 px-2 border rounded-md hover:bg-muted transition-colors bg-background"
+                        >
+                          MAX
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground">Reason / Description</label>
+                    <Input
+                      placeholder="e.g. Pass GO or Luxury Tax"
+                      value={bankReason}
+                      onChange={(e) => setBankReason(e.target.value)}
+                      className="bg-background border-border/80"
+                    />
+                  </div>
+
+                  {bankError && <p className="text-xs text-destructive">{bankError}</p>}
+
+                  <Button
+                    type="submit"
+                    disabled={bankLoading || !bankAmount || (walletTab === "deposit" && parseInt(bankAmount) > (currentPlayer?.balance ?? 0))}
+                    className="w-full py-5 text-sm font-semibold"
+                  >
+                    {bankLoading ? "Submitting..." : walletTab === "deposit" ? "Deposit to Bank" : "Request Bank Cash"}
+                  </Button>
+                </form>
+              )}
+            </div>
+          </Card>
+
+          {/* Access Code */}
+          <Card className="shadow-md border border-border/60">
+            <CardHeader className="pb-3 border-b bg-muted/20">
+              <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                <QrCodeIcon weight="duotone" className="text-primary size-4" /> Game Session
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-4">
+              <div className="flex items-center justify-between p-3 border border-border/80 rounded-lg bg-muted/10">
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase font-semibold">Room Invite Code</p>
+                  <p className="font-mono text-2xl font-bold tracking-wider text-foreground mt-0.5">{code}</p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => {
+                      navigator.clipboard.writeText(code);
+                      toast.success("Room code copied!");
+                    }}
+                  >
+                    Copy
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => setShowQr(true)}
+                  >
+                    Show QR
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+        </div>
+
+        {/* Right Column: Admin Panel / Audit Log */}
+        <div className="col-span-12 lg:col-span-8 space-y-6">
+          
+          {isAdmin ? (
+            <div className="space-y-6">
+              
+              {/* Banker Approvals Queue */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* Transfer approvals */}
+                <Card className="shadow-md border border-amber-500/20 overflow-hidden">
+                  <div className="p-4 bg-amber-500/[0.04] border-b border-amber-500/20 flex justify-between items-center">
+                    <CardTitle className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                      <ClockIcon weight="duotone" className="size-4" /> Player Transfers
+                    </CardTitle>
+                    <span className="text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full font-bold">
+                      {transferRequests.length} Pending
+                    </span>
+                  </div>
+                  <CardContent className="p-0 max-h-[300px] overflow-y-auto divide-y divide-border/40">
+                    {transferRequests.length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-8">No pending player transfers</p>
+                    ) : (
+                      transferRequests.map((req) => (
+                        <div key={req._id} className="p-4 flex flex-col gap-3 bg-card hover:bg-muted/10 transition-colors">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="font-semibold text-sm text-foreground">{req.playerName}</p>
+                              {req.reason && <p className="text-xs text-muted-foreground mt-0.5">{req.reason}</p>}
+                            </div>
+                            <span className="font-mono font-bold text-base text-amber-600 dark:text-amber-400">${req.amount.toLocaleString()}</span>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleRejectRequest(req._id)}
+                              disabled={processingRequestId === req._id}
+                              className="flex-1 text-xs text-destructive hover:bg-destructive/10 h-8"
+                            >
+                              Reject
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => handleApproveRequest(req._id)}
+                              disabled={processingRequestId === req._id}
+                              className="flex-1 text-xs h-8 bg-amber-500 hover:bg-amber-600 text-white"
+                            >
+                              Approve
+                            </Button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Bank request approvals */}
+                <Card className="shadow-md border border-violet-500/20 overflow-hidden">
+                  <div className="p-4 bg-violet-500/[0.04] border-b border-violet-500/20 flex justify-between items-center">
+                    <CardTitle className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">
+                      <VaultIcon weight="duotone" className="size-4" /> Bank Operations
+                    </CardTitle>
+                    <span className="text-[10px] bg-violet-500/10 text-violet-600 dark:text-violet-400 px-2 py-0.5 rounded-full font-bold">
+                      {bankRequests.length} Pending
+                    </span>
+                  </div>
+                  <CardContent className="p-0 max-h-[300px] overflow-y-auto divide-y divide-border/40">
+                    {bankRequests.length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-8">No pending bank operations</p>
+                    ) : (
+                      bankRequests.map((req: any) => (
+                        <div key={req._id} className="p-4 flex flex-col gap-3 bg-card hover:bg-muted/10 transition-colors">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="font-semibold text-sm text-foreground">{req.playerName}</p>
+                              <p className="text-[10px] text-muted-foreground font-semibold flex items-center gap-1 uppercase tracking-wider mt-0.5">
+                                {req.reason || (req.amount >= 0 ? "Deposit Request" : "Withdrawal Request")}
+                              </p>
+                            </div>
+                            <span className="font-mono font-bold text-base text-violet-600 dark:text-violet-400">${Math.abs(req.amount).toLocaleString()}</span>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleRejectRequest(req._id)}
+                              disabled={processingRequestId === req._id}
+                              className="flex-1 text-xs text-destructive hover:bg-destructive/10 h-8"
+                            >
+                              Reject
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => handleApproveRequest(req._id)}
+                              disabled={processingRequestId === req._id}
+                              className="flex-1 text-xs h-8 bg-violet-500 hover:bg-violet-600 text-white"
+                            >
+                              Approve
+                            </Button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+
+              </div>
+
+              {/* Player Management spreadsheet */}
+              <Card className="shadow-md border border-border/60 overflow-hidden">
+                <div className="p-4 bg-muted/20 border-b flex justify-between items-center">
+                  <div>
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <UsersIcon weight="duotone" className="text-primary size-5" /> Board Accounts & Session Management
+                    </CardTitle>
+                  </div>
+                </div>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-sm">
+                      <thead>
+                        <tr className="border-b border-border bg-muted/30">
+                          <th className="p-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Account Name</th>
+                          <th className="p-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Role</th>
+                          <th className="p-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wider">Capital Balance</th>
+                          <th className="p-3.5 font-semibold text-muted-foreground text-xs uppercase tracking-wider text-right">Administrative Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/40">
+                        {players?.map((p) => (
+                          <tr key={p._id} className="hover:bg-muted/10 transition-colors">
+                            <td className="p-3.5 font-medium">
+                              <span className="flex items-center gap-2">
+                                {p.name}
+                                {p._id === playerId && <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-bold">You</span>}
+                              </span>
+                            </td>
+                            <td className="p-3.5">
+                              {p.isAdmin ? (
+                                <span className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-bold">
+                                  <ShieldIcon weight="fill" className="size-3" /> Banker (Host)
+                                </span>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">Player</span>
+                              )}
+                            </td>
+                            <td className="p-3.5 font-mono font-bold text-base text-foreground">${p.balance.toLocaleString()}</td>
+                            <td className="p-3.5 text-right">
+                              {p._id !== playerId && (
+                                <div className="inline-flex items-center gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-xs h-8"
+                                    onClick={() => {
+                                      setAdjustPlayerId(p._id);
+                                      // Focus the adjust box
+                                      const el = document.getElementById("manual-adjust-box");
+                                      if (el) el.scrollIntoView({ behavior: "smooth" });
+                                    }}
+                                  >
+                                    Adjust Cash
+                                  </Button>
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    className="text-xs h-8"
+                                    onClick={() => handleKickPlayer(p)}
+                                    disabled={kickingPlayerId === p._id}
+                                  >
+                                    Kick Account
+                                  </Button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Adjust Cash Panel & Logs */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* Adjust panel */}
+                <Card id="manual-adjust-box" className="shadow-md border border-border/60">
+                  <CardHeader className="pb-3 border-b bg-muted/20">
+                    <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+                      <PlusCircleIcon weight="duotone" className="text-primary size-5" /> Manual Cash Correction
+                    </CardTitle>
+                    <CardDescription>Mint or burn capital for accounts</CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    <form onSubmit={handleAdjustSubmit} className="space-y-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-muted-foreground">Select Target Player</label>
+                        <Select
+                          value={adjustPlayerId}
+                          onValueChange={(v) => setAdjustPlayerId(v || "")}
+                        >
+                          <SelectTrigger className="w-full bg-background border-border/80">
+                            <SelectValue placeholder="Choose target..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {players?.map((p) => (
+                              <SelectItem key={p._id} value={p._id}>
+                                {p.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-muted-foreground">
+                          Amount (Positive to add, negative to subtract)
+                        </label>
+                        <Input
+                          type="number"
+                          placeholder="e.g. 500 or -250"
+                          value={adjustAmount}
+                          onChange={(e) => {
+                            setAdjustError("");
+                            setAdjustAmount(e.target.value);
+                          }}
+                          className="font-mono bg-background border-border/80"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-muted-foreground">Justification Description</label>
+                        <Input
+                          placeholder="e.g. Passed GO bonus error correction"
+                          value={adjustReason}
+                          onChange={(e) => setAdjustReason(e.target.value)}
+                          className="bg-background border-border/80"
+                        />
+                      </div>
+
+                      {adjustError && <p className="text-xs text-destructive">{adjustError}</p>}
+
+                      <Button
+                        type="submit"
+                        disabled={adjustLoading || !adjustPlayerId || !adjustAmount}
+                        className="w-full py-4 text-xs font-bold uppercase tracking-wider"
+                      >
+                        {adjustLoading ? "Adjusting..." : "Execute Adjust Correction"}
+                      </Button>
+                    </form>
+                  </CardContent>
+                </Card>
+
+                {/* Audit log list */}
+                <Card className="shadow-md border border-border/60 flex flex-col overflow-hidden">
+                  <CardHeader className="pb-3 border-b bg-muted/20">
+                    <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+                      <ClockIcon weight="duotone" className="text-primary size-5" /> Real-time Audit Ledger
+                    </CardTitle>
+                    <CardDescription>Live log of transfers and corrections</CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-4 flex-1 overflow-y-auto max-h-[360px]">
+                    <TransactionHistoryDrawer roomId={roomId} />
+                  </CardContent>
+                </Card>
+
+              </div>
+
+            </div>
+          ) : (
+            <div className="space-y-6">
+              
+              {/* Normal Player Main View: Ledger & Info */}
+              <Card className="shadow-md border border-border/60 flex flex-col overflow-hidden">
+                <CardHeader className="pb-3 border-b bg-muted/20">
+                  <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+                    <ClockIcon weight="duotone" className="text-primary size-5" /> Global Transaction Audit Ledger
+                  </CardTitle>
+                  <CardDescription>Live view of all money flows at the table</CardDescription>
+                </CardHeader>
+                <CardContent className="p-4 flex-1 overflow-y-auto max-h-[500px]">
+                  <TransactionHistoryDrawer roomId={roomId} />
+                </CardContent>
+              </Card>
+
+            </div>
+          )}
+
+        </div>
+
+      </div>
+
     </div>
   );
 }
