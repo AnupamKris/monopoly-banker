@@ -1,154 +1,130 @@
 # Monopoly Banker
 
-Monopoly Banker is a mobile-first progressive web app for running the money side of a Monopoly game without paper cash. One player creates a room, becomes the banker, and shares a short room code or QR link with the rest of the table. Players can track balances, send money to each other, deposit to the bank, and request withdrawals while the banker keeps final control over approvals and manual adjustments.
+**Play Monopoly without paper cash.**
 
-The app is built with Next.js, React, Tailwind CSS, shadcn/ui-style components, Serwist for PWA support, and Convex for the realtime backend.
+Monopoly Banker is a mobile-first web app that turns your phone into a digital bank for Monopoly. One player creates a room and becomes the banker. Everyone else joins with a 6-character code or by scanning a QR code. Balances update in realtime, transfers are confirmed with a slide gesture, and the banker controls all approvals.
+
+**[monopoly.anupamkris.dev](https://monopoly.anupamkris.dev)**
+
+## How It Works
+
+1. The banker opens the app, taps **Create Room**, and sets an admin password.
+2. A 6-character room code appears. Share it at the table or show the QR code for others to scan.
+3. Players tap **Join Room**, enter their name and the code, and start with $1,500.
+4. Play Monopoly. Use the app to handle all money movement instead of paper bills.
 
 ## Features
 
-- Create private game rooms with 6-character room codes.
-- Protect banker controls with an admin password.
-- Join rooms by code, saved room history, or `?join=ROOMCODE` deep links.
-- Share room invites with a QR code.
-- Track player balances in realtime.
-- Send money directly between players.
-- Deposit money to the bank or request withdrawals from the banker.
-- Approve or reject player money requests.
-- Manually add or remove money as an admin.
-- Kick players from a room as an admin.
-- View a room transaction history.
-- Install and run as a PWA, including an offline fallback page.
+**For everyone at the table:**
 
-## Tech Stack
+- Track your balance and see all players' balances in realtime.
+- Send money to another player with a dialpad and slide-to-confirm gesture.
+- Deposit money to the bank (rent, taxes, chance cards).
+- Request money from the bank (passing Go, community chest) — the banker approves it.
+- View the full transaction history for the room.
+- Rejoin a room automatically if you reload or switch tabs.
+- Save up to 10 recent rooms for quick re-entry.
 
-- **Framework:** Next.js 16 with React 19
-- **Backend:** Convex, including an app-level wrapper and an isolated `monopolyBanker` Convex component
-- **Styling:** Tailwind CSS 4
-- **UI:** local component library generated in `components/ui`
-- **PWA:** Serwist with a generated service worker route
-- **Package manager:** pnpm
+**For the banker:**
 
-## Getting Started
+- Approve or reject player withdrawal requests from a dedicated admin panel.
+- Manually adjust any player's balance (add or remove money).
+- Give money directly to a player from the bank.
+- Kick players from the room.
+- All admin actions are protected behind the password you set when creating the room.
+
+**Sharing and joining:**
+
+- Share a room code verbally or copy it to the clipboard.
+- Show a QR code that links directly to your room — players scan and join instantly.
+- Deep link support: append `?join=ROOMCODE` to the URL and it auto-joins.
+
+**As a mobile app:**
+
+- Install as a PWA on your phone's home screen — runs standalone without browser chrome.
+- Portrait-locked layout designed for one-handed use on a phone.
+- Bottom-sheet drawers for transfers, bank operations, and history.
+- Dark mode with system preference detection (press `D` to toggle).
+
+## Notes
+
+- This app is for casual tabletop Monopoly play, not real-money payments.
+- Room access is based on room codes and local browser sessions. There are no user accounts.
+- Admin passwords are hashed with SHA-256 before storage.
+
+---
+
+## Self-Hosting
+
+The rest of this README covers running your own instance of Monopoly Banker.
+
+### Tech Stack
+
+| Layer | Technology |
+| --- | --- |
+| Framework | Next.js 16 with React 19 and Turbopack |
+| Backend | Convex (realtime database + server functions) |
+| Styling | Tailwind CSS 4 |
+| UI | shadcn/ui components, Phosphor Icons |
+| PWA | Serwist (service worker) |
+| QR Codes | qrcode.react |
+| Dark Mode | next-themes |
+| Language | TypeScript |
+| Package Manager | pnpm |
 
 ### Prerequisites
 
 - Node.js 20 or newer
 - pnpm
-- A Convex project/deployment
+- A Convex account ([convex.dev](https://convex.dev))
 
-### Install Dependencies
+### Install
 
 ```bash
+git clone https://github.com/anupamkris/monopoly-banker.git
+cd monopoly-banker
 pnpm install
 ```
 
-### Configure Environment
+### Configure
 
-Create `.env.local` and set the Convex deployment URL:
+For a new Convex deployment:
+
+```bash
+npx convex dev
+```
+
+Follow the prompts to create a project. This generates a deployment URL. Create `.env.local`:
 
 ```bash
 NEXT_PUBLIC_CONVEX_URL=https://your-deployment.convex.cloud
 ```
 
-For a new Convex deployment, run:
-
-```bash
-npx convex dev
-```
-
-Follow the Convex prompts, then copy the generated deployment URL into `.env.local` if it was not written automatically.
+If `npx convex dev` wrote the URL automatically, you can skip the manual step.
 
 ### Run Locally
 
-Run the Next.js app:
+Start Convex and Next.js in separate terminals:
 
 ```bash
-pnpm dev
-```
-
-Run Convex in a second terminal if it is not already running:
-
-```bash
+# Terminal 1 — Convex backend
 npx convex dev
+
+# Terminal 2 — Next.js frontend
+pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
 
-## Available Scripts
+### Deploy
 
-```bash
-pnpm dev
-```
-
-Starts the local Next.js dev server with Turbopack.
-
-```bash
-pnpm build
-```
-
-Builds the production app.
-
-```bash
-pnpm start
-```
-
-Starts the production Next.js server after a build.
-
-```bash
-pnpm lint
-```
-
-Runs ESLint.
-
-```bash
-pnpm typecheck
-```
-
-Runs TypeScript without emitting files.
-
-```bash
-pnpm format
-```
-
-Formats TypeScript and TSX files with Prettier.
-
-## Project Structure
-
-```text
-app/                         Next.js app routes, layout, manifest, PWA service worker route
-components/                  App providers and local UI components
-convex/                      Convex app functions and generated bindings
-convex/components/           Isolated Convex components
-convex/components/monopolyBanker/
-  schema.ts                  Component database schema
-  lib.ts                     Room, player, request, transfer, and transaction logic
-hooks/                       Shared React hooks
-lib/                         Shared utilities
-public/icons/                PWA icons
-```
-
-## Convex Backend
-
-The public client API lives in `convex/monopolyBanker.ts`. It wraps the isolated component functions from `convex/components/monopolyBanker/lib.ts`.
-
-The component schema stores:
-
-- `rooms`: room codes, hashed admin passwords, creator connection IDs, and player counts
-- `players`: player names, balances, admin status, connection IDs, and join times
-- `moneyRequests`: pending, approved, and rejected money or bank withdrawal requests
-- `transactions`: audit trail entries for joins, leaves, transfers, bank operations, approvals, and manual changes
-
-The admin password is hashed with SHA-256 before storage. Player sessions are tied to a browser-local connection ID and validated against Convex when the app reloads.
-
-## Deployment
-
-1. Deploy Convex:
+1. Deploy the Convex backend:
 
    ```bash
    npx convex deploy
    ```
 
-2. Set `NEXT_PUBLIC_CONVEX_URL` in the hosting provider environment.
+2. Set `NEXT_PUBLIC_CONVEX_URL` in your hosting provider's environment variables to the production Convex URL.
 
 3. Build and deploy the Next.js app:
 
@@ -156,10 +132,43 @@ The admin password is hashed with SHA-256 before storage. Player sessions are ti
    pnpm build
    ```
 
-For Vercel or another Next.js host, make sure the production environment contains the same Convex URL used by the deployed backend.
+   For Vercel or another Next.js host, ensure the production environment has the same Convex URL used by the deployed backend.
 
-## Notes
+### Available Scripts
 
-- This app is intended for casual tabletop play, not real-money payments.
-- Room access is based on room codes and local browser sessions; it does not currently use external user accounts.
-- Generated Convex files under `convex/_generated` and `convex/components/**/_generated` are framework output and should be regenerated through Convex tooling when backend functions change.
+| Command | Description |
+| --- | --- |
+| `pnpm dev` | Next.js dev server with Turbopack |
+| `pnpm build` | Production build |
+| `pnpm start` | Production server (after build) |
+| `pnpm lint` | ESLint |
+| `pnpm typecheck` | TypeScript type checking (no emit) |
+| `pnpm format` | Prettier formatting |
+
+### Project Structure
+
+```text
+app/                            Next.js routes, layout, manifest, service worker
+components/                     Providers and UI components
+  ui/                           shadcn/ui component library
+convex/                         Convex app functions and generated bindings
+  components/monopolyBanker/    Isolated Convex component
+    schema.ts                   Database schema (rooms, players, requests, transactions)
+    lib.ts                      All business logic
+hooks/                          Shared React hooks
+lib/                            Shared utilities
+public/icons/                   PWA icons
+```
+
+### Convex Backend
+
+The public API is in `convex/monopolyBanker.ts`, which delegates to the isolated component in `convex/components/monopolyBanker/lib.ts`. The schema has four tables:
+
+- **rooms** — room codes, hashed admin passwords, player counts
+- **players** — names, balances, admin status, connection IDs
+- **moneyRequests** — pending/approved/rejected money and bank requests
+- **transactions** — full audit trail of all operations
+
+Admin passwords are hashed with SHA-256 using the Web Crypto API. Player sessions are tied to a browser-local `connectionId` and validated on every write operation.
+
+Generated files under `convex/_generated` and `convex/components/**/_generated` are Convex framework output. Regenerate them with `npx convex dev` or `npx convex deploy` when backend functions change.
